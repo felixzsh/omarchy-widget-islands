@@ -9,6 +9,6 @@
     "bar"
   ],
   "entryPoints": {
-    "bar": "Bar.qml"
+    "bar": "RailsBar.qml"
   }
 }

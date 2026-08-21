@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# run-upstream.sh — opción C (ponytail): no copia tests, los ejecuta overlayeando
-# este repo sobre un checkout upstream temporal.
+# run-upstream.sh — option C (ponytail): does not copy tests, runs them by
+# overlaying this repo onto a temporary upstream checkout.
 #
-# Uso:
-#   test/run-upstream.sh                      # corre suite bar relevante
-#   test/run-upstream.sh test/shell.d/bar-test.sh  # corre solo uno
+# Usage:
+#   test/run-upstream.sh                      # run relevant bar suite
+#   test/run-upstream.sh test/shell.d/bar-test.sh  # run a single test
 #   OMARCHY_SRC=/path/to/omarchy test/run-upstream.sh
-#   KEEP_TMP=1 test/run-upstream.sh           # deja /tmp para debug
+#   KEEP_TMP=1 test/run-upstream.sh           # keep /tmp for debugging
 #
-# Requiere: bash, node, rg, jq (para los tests upstream). Quickshell opcional.
-# Si corre sin compositor, los tests que requieren Quickshell se skippean solos.
+# Requires: bash, node, rg, jq (for upstream tests). Quickshell optional.
+# When run without a compositor, tests that require Quickshell are skipped automatically.
 
 set -euo pipefail
 
 FRAME_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# 1) Localizar checkout upstream
+# 1) Locate upstream checkout
 OMARCHY_SRC="${OMARCHY_SRC:-}"
 if [[ -z "$OMARCHY_SRC" ]]; then
-  # preferir ../omarchy si existe (layout dev fe1ix), luego upstream remote
+  # prefer ../omarchy if it exists (dev layout fe1ix), then upstream remote
   if [[ -d "$FRAME_ROOT/../omarchy/test/shell.d" ]]; then
     OMARCHY_SRC="$(cd "$FRAME_ROOT/../omarchy" && pwd)"
   else
-    # fallback: clonar desde remote `upstream` a tmp y usarlo como src
+    # fallback: clone from `upstream` remote to tmp and use as src
     OMARCHY_SRC=""
   fi
 fi
@@ -30,7 +30,7 @@ fi
 TMPDIR=""
 cleanup() {
   if [[ -n "${KEEP_TMP:-}" ]]; then
-    echo "KEEP_TMP: dejando TMP en $TMPDIR" >&2
+    echo "KEEP_TMP: keeping TMP at $TMPDIR" >&2
     return
   fi
   [[ -n "$TMPDIR" && -d "$TMPDIR" ]] && rm -rf "$TMPDIR"
@@ -39,12 +39,12 @@ trap cleanup EXIT
 
 if [[ -n "$OMARCHY_SRC" && -d "$OMARCHY_SRC" ]]; then
   TMPDIR="$(mktemp -d)"
-  # Copia eficiente del checkout (excluye .git para ahorrar)
+  # Efficient checkout copy (exclude .git to save space)
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --exclude='.git' --exclude='.venv' --exclude='result' "$OMARCHY_SRC/" "$TMPDIR/"
   else
     cp -a "$OMARCHY_SRC" "$TMPDIR/omarchy"
-    # cp -a con carpeta distinta: mover contenido a TMPDIR
+    # cp -a with different folder: move contents to TMPDIR
     if [[ -d "$TMPDIR/omarchy" ]]; then
       shopt -s dotglob
       mv "$TMPDIR/omarchy"/* "$TMPDIR/" 2>/dev/null || true
@@ -53,34 +53,34 @@ if [[ -n "$OMARCHY_SRC" && -d "$OMARCHY_SRC" ]]; then
       shopt -u dotglob
     fi
   fi
-  # Re-crear .git mínimo para que tests que invocan git (pocos) no fallen
+  # Re-create minimal .git so tests that invoke git (few) do not fail
   mkdir -p "$TMPDIR/.git"
 else
-  # Sin checkout local: clonar shallow desde upstream remote
+  # Without local checkout: shallow clone from upstream remote
   remote_url="$(git -C "$FRAME_ROOT" config --get remote.upstream.url 2>/dev/null || echo "https://github.com/basecamp/omarchy.git")"
   TMPDIR="$(mktemp -d)"
-  echo "Clonando upstream $remote_url (quattro) a $TMPDIR ..." >&2
+  echo "Cloning upstream $remote_url (quattro) to $TMPDIR ..." >&2
   git clone --depth 1 --branch quattro "$remote_url" "$TMPDIR" 2>&1 | tail -n 5
 fi
 
-# 2) Overlay de este repo (bar-only) sobre el checkout temporal
+# 2) Overlay this repo (bar-only) onto the temporary checkout
 echo "Overlay frame -> $TMPDIR/shell/plugins/bar" >&2
 mkdir -p "$TMPDIR/shell/plugins/bar"
-# Archivos obligatorios (siempre existen)
+# Required files (always exist) — Bar.qml verbatim upstream, never edited
 cp -f "$FRAME_ROOT/Bar.qml" "$TMPDIR/shell/plugins/bar/Bar.qml"
 cp -f "$FRAME_ROOT/BarModel.js" "$TMPDIR/shell/plugins/bar/BarModel.js"
-# Opcionales (cuando existan, no fallar si no) — RailModel es el nuevo, FrameModel se mantiene por compat
-for f in RailModel.js FrameModel.js RailPanel.qml RailHints.qml MainBarPanel.qml; do
+# Wrapper + rails model (entry point is RailsBar.qml, not Bar.qml)
+for f in RailsBar.qml RailModel.js RailPanel.qml RailHints.qml; do
   [[ -f "$FRAME_ROOT/$f" ]] && cp -f "$FRAME_ROOT/$f" "$TMPDIR/shell/plugins/bar/$f"
 done
-# Rails/ subdir si existe (nuevo Bar.qml lo espera en Rails/)
+# Rails/ subdir if it exists (RailsBar.qml expects it at Rails/)
 if [[ -d "$FRAME_ROOT/Rails" ]]; then
   mkdir -p "$TMPDIR/shell/plugins/bar/Rails"
   cp -f "$FRAME_ROOT/Rails"/* "$TMPDIR/shell/plugins/bar/Rails/" 2>/dev/null || true
 fi
-# Widgets/indicators si fueron tocados en frame (mantener upstream si no)
+# Widgets/indicators if touched in frame (keep upstream otherwise)
 if [[ -d "$FRAME_ROOT/widgets" ]]; then
-  # solo overlayea archivos que existen en frame (no borra otros del upstream)
+  # only overlay files that exist in frame (do not delete others from upstream)
   for w in "$FRAME_ROOT"/widgets/*; do
     [[ -e "$w" ]] && cp -f "$w" "$TMPDIR/shell/plugins/bar/widgets/" 2>/dev/null || cp -f "$w" "$TMPDIR/shell/plugins/bar/widgets/$(basename "$w")"
   done
@@ -91,10 +91,10 @@ if [[ -d "$FRAME_ROOT/indicators" ]]; then
   done
 fi
 
-# 3) Elegir qué tests correr
-# Suite mínima bar-relevante (sin copiar archivos, los leemos del TMP).
-# Nota: bar-icon-geometry y config-test fallan sin compositor/fuentes/pkgs — corren explícitos, no en default.
-# Añade aquí si upstream agrega tests de bar.
+# 3) Choose which tests to run
+# Minimal bar-relevant suite (without copying files, we read them from TMP).
+# Note: bar-icon-geometry and config-test fail without compositor/fonts/pkgs — run explicitly, not in default.
+# Add here if upstream adds bar tests.
 DEFAULT_TESTS=(
   "test/shell.d/bar-test.sh"
   "test/shell.d/bar-widget-contract-test.sh"
@@ -110,7 +110,7 @@ else
   TESTS=("${DEFAULT_TESTS[@]}")
 fi
 
-# 4) Ejecutar
+# 4) Execute
 FAILED=()
 PASSED=()
 export ROOT="$TMPDIR"
@@ -121,13 +121,13 @@ echo "Tests: ${TESTS[*]}" >&2
 echo "" >&2
 
 for t in "${TESTS[@]}"; do
-  # permitir tanto rutas relativas al TMP como al frame
+  # allow both TMP-relative and frame-relative paths
   candidate="$TMPDIR/$t"
   if [[ ! -f "$candidate" && -f "$FRAME_ROOT/$t" ]]; then
     candidate="$FRAME_ROOT/$t"
   fi
   if [[ ! -f "$candidate" ]]; then
-    # si el test no existe en upstream (ej. rails-test.sh local), correrlo directo con ROOT=FRAME_ROOT
+    # if the test does not exist upstream (e.g. local rails-test.sh), run it directly with ROOT=FRAME_ROOT
     if [[ -f "$FRAME_ROOT/$t" ]]; then
       echo "==> $t (local, ROOT=$FRAME_ROOT)" >&2
       if ROOT="$FRAME_ROOT" OMARCHY_PATH="$FRAME_ROOT" bash "$FRAME_ROOT/$t"; then
@@ -137,7 +137,7 @@ for t in "${TESTS[@]}"; do
       fi
       continue
     fi
-    echo "skip - $t (no existe en upstream)" >&2
+    echo "skip - $t (does not exist upstream)" >&2
     continue
   fi
   echo "==> $t" >&2
@@ -150,7 +150,7 @@ for t in "${TESTS[@]}"; do
 done
 
 echo "----------------------------------------" >&2
-echo "Pasaron: ${#PASSED[@]}/${#TESTS[@]}  Fallaron: ${#FAILED[@]}" >&2
+echo "Passed: ${#PASSED[@]}/${#TESTS[@]}  Failed: ${#FAILED[@]}" >&2
 if (( ${#PASSED[@]} > 0 )); then
   printf '  ok: %s\n' "${PASSED[@]}" >&2
 fi
