@@ -1,0 +1,205 @@
+import Quickshell
+import QtQuick
+import qs.Commons
+import qs.Ui
+import "RailModel.js" as RailModel
+import "Rails"
+
+Item {
+    id: root
+
+    // Host-injected props (plain, not required — wrapper satisfies Bar's required at creation)
+    property string omarchyPath: ""
+    property var barWidgetRegistry: null
+    property var barConfig: fallbackBarConfig
+    property var shell: null
+    property var manifest: null
+
+    // Fallback when host hasn't yet provided barConfig (jm)
+    property var fallbackBarConfig: ({
+        position: "top",
+        transparent: false,
+        centerAnchor: "omarchy.clock",
+        layout: { left: [], center: [], right: [] },
+        rails: {
+            enabled: false,
+            trigger: "hover",
+            top: { left: [], center: [], right: [] },
+            bottom: { left: [], center: [], right: [] },
+            left: { left: [], center: [], right: [] },
+            right: { left: [], center: [], right: [] }
+        }
+    })
+
+    // Rails state — parsed from bar.rails
+    property bool railsEnabled: false
+    property string railsTrigger: "hover"
+    property var normalizedRails: ({
+        enabled: false,
+        trigger: "hover",
+        rails: {
+            top: { left: [], center: [], right: [] },
+            bottom: { left: [], center: [], right: [] },
+            left: { left: [], center: [], right: [] },
+            right: { left: [], center: [], right: [] }
+        }
+    })
+    property int barConfigSerial: 0
+
+    // Duck contract for shell.bar — aliases to innerBar (main)
+    readonly property alias barHidden: innerBar.barHidden
+    readonly property alias barSize: innerBar.barSize
+    readonly property alias position: innerBar.position
+    readonly property alias vertical: innerBar.vertical
+    readonly property alias foreground: innerBar.foreground
+    readonly property alias background: innerBar.background
+    readonly property alias fontFamily: innerBar.fontFamily
+
+    // Forwarded methods (guard typeof)
+    function run(command) { if (innerBar && typeof innerBar.run === "function") return innerBar.run(command) }
+    function showTooltip(target, text) { if (innerBar && typeof innerBar.showTooltip === "function") return innerBar.showTooltip(target, text) }
+    function hideTooltip(target) { if (innerBar && typeof innerBar.hideTooltip === "function") return innerBar.hideTooltip(target) }
+    function requestPopout(owner) { if (innerBar && typeof innerBar.requestPopout === "function") return innerBar.requestPopout(owner) }
+    function releasePopout(owner) { if (innerBar && typeof innerBar.releasePopout === "function") return innerBar.releasePopout(owner) }
+    function summonBarWidget(id) { if (innerBar && typeof innerBar.summonBarWidget === "function") return innerBar.summonBarWidget(id); return false }
+    function hideBarWidget(id) { if (innerBar && typeof innerBar.hideBarWidget === "function") return innerBar.hideBarWidget(id); return false }
+    function isBarWidgetOpen(id) { if (innerBar && typeof innerBar.isBarWidgetOpen === "function") return innerBar.isBarWidgetOpen(id); return false }
+    function toggleTransparency() { if (innerBar && typeof innerBar.toggleTransparency === "function") return innerBar.toggleTransparency() }
+    function debugBarGeometry() { if (innerBar && typeof innerBar.debugBarGeometry === "function") return innerBar.debugBarGeometry(); return [] }
+    function panelWidgetIdAt(region, index) { if (innerBar && typeof innerBar.panelWidgetIdAt === "function") return innerBar.panelWidgetIdAt(region, index); return "" }
+
+    function applyBarConfig() {
+        var config = Util.isPlainObject(root.barConfig) ? root.barConfig : root.fallbackBarConfig
+        var railsRaw = config.rails
+        var pos = config.position
+        var parsed = RailModel.normalizeRailsConfig(railsRaw, pos)
+        railsEnabled = parsed.enabled
+        railsTrigger = parsed.trigger
+        normalizedRails = parsed
+        barConfigSerial++
+    }
+
+    onBarConfigChanged: applyBarConfig()
+    Component.onCompleted: applyBarConfig()
+
+    // Main bar — must be first so Hyprland arranges main before rails (invite)
+    Bar {
+        id: innerBar
+        omarchyPath: root.omarchyPath
+        barWidgetRegistry: root.barWidgetRegistry
+        barConfig: root.barConfig
+        shell: root.shell
+        manifest: root.manifest
+    }
+
+    // Rails — 3 per monitor (edge !== position), trapped between main and parallel
+    // React to barConfigSerial + innerBar.position for correct filtering
+    Variants {
+        model: Quickshell.screens
+
+        delegate: Component {
+            Item {
+                id: screenDelegate
+                required property var modelData
+                readonly property var screen: modelData
+
+                // Compute thickness once per screen-delegate (reacts to barSize changes)
+                readonly property int thickness: RailModel.railThickness(innerBar.barSize)
+                readonly property string mainPos: innerBar.position
+                readonly property int cfgSerial: root.barConfigSerial
+
+                // Helper to check if rail should be instantiated (has widgets and not main)
+                function shouldShowEdge(edge) {
+                    // touch cfgSerial for reactivity
+                    var s = cfgSerial
+                    if (!root.railsEnabled) return false
+                    if (edge === mainPos) return false
+                    var layout = root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails[edge] : null
+                    return RailModel.hasAnyWidgets(layout)
+                }
+
+                // Visual frame — Top Ignore, trapped only laterals, parallel full-span
+                RailPanel {
+                    screen: screenDelegate.screen
+                    edge: "top"
+                    mainPosition: screenDelegate.mainPos
+                    barSize: innerBar.barSize
+                    thickness: screenDelegate.thickness
+                    barHidden: innerBar.barHidden
+                    hasWidgets: screenDelegate.shouldShowEdge("top")
+                    backgroundColor: innerBar.background
+                    transparent: innerBar.transparent
+                }
+
+                RailPanel {
+                    screen: screenDelegate.screen
+                    edge: "bottom"
+                    mainPosition: screenDelegate.mainPos
+                    barSize: innerBar.barSize
+                    thickness: screenDelegate.thickness
+                    barHidden: innerBar.barHidden
+                    hasWidgets: screenDelegate.shouldShowEdge("bottom")
+                    backgroundColor: innerBar.background
+                    transparent: innerBar.transparent
+                }
+
+                RailPanel {
+                    screen: screenDelegate.screen
+                    edge: "left"
+                    mainPosition: screenDelegate.mainPos
+                    barSize: innerBar.barSize
+                    thickness: screenDelegate.thickness
+                    barHidden: innerBar.barHidden
+                    hasWidgets: screenDelegate.shouldShowEdge("left")
+                    backgroundColor: innerBar.background
+                    transparent: innerBar.transparent
+                }
+
+                RailPanel {
+                    screen: screenDelegate.screen
+                    edge: "right"
+                    mainPosition: screenDelegate.mainPos
+                    barSize: innerBar.barSize
+                    thickness: screenDelegate.thickness
+                    barHidden: innerBar.barHidden
+                    hasWidgets: screenDelegate.shouldShowEdge("right")
+                    backgroundColor: innerBar.background
+                    transparent: innerBar.transparent
+                }
+
+                // Invisible reservers — Overlay Auto, full-span, keep main 0,0 full while resizing workspace
+                RailReserve {
+                    screen: screenDelegate.screen
+                    edge: "top"
+                    thickness: screenDelegate.thickness
+                    hasWidgets: screenDelegate.shouldShowEdge("top")
+                    barHidden: innerBar.barHidden
+                }
+
+                RailReserve {
+                    screen: screenDelegate.screen
+                    edge: "bottom"
+                    thickness: screenDelegate.thickness
+                    hasWidgets: screenDelegate.shouldShowEdge("bottom")
+                    barHidden: innerBar.barHidden
+                }
+
+                RailReserve {
+                    screen: screenDelegate.screen
+                    edge: "left"
+                    thickness: screenDelegate.thickness
+                    hasWidgets: screenDelegate.shouldShowEdge("left")
+                    barHidden: innerBar.barHidden
+                }
+
+                RailReserve {
+                    screen: screenDelegate.screen
+                    edge: "right"
+                    thickness: screenDelegate.thickness
+                    hasWidgets: screenDelegate.shouldShowEdge("right")
+                    barHidden: innerBar.barHidden
+                }
+            }
+        }
+    }
+}
