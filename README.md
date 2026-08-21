@@ -1,24 +1,23 @@
-# omarchy frame
+# Omarchy Bar with Rails
 
-This is the Quickshell implementation of the Omarchy status bar. It is
-shipped as a first-party plugin of [`omarchy-shell`](../../README.md), the
-long-running shell host. The bar is mounted at startup and lives inside
-the shell for its whole session.
+Quickshell **bar → bar with rails** — a single always-visible main bar wrapped by 3 thin rails that form a frame around the workspace. Built for when `omarchy bar` is full: instead of cramming more widgets into one bar, you distribute them around the perimeter without clutter.
 
-- `manifest.json` declares the plugin (`id: omarchy.bar`, `kind: bar`) and points at `Bar.qml` as the entry point.
-- `Bar.qml` is Omarchy-owned bar engine code, loaded by the omarchy-shell host. Users should not edit it directly.
-- `widgets/` holds simple first-party bar widgets with sibling manifests.
-- Feature plugins such as `../panels/audio/`, `../panels/network/`, `../panels/power/`, and `../agents/` provide richer popup bar plugins.
-- The bar receives its config from the host shell as a `barConfig` property; the host loads it from `~/.config/omarchy/shell.json` (or `config/omarchy/shell.json` when the user has no file).
-- `omarchy bar position` updates only the user shell.json file.
+> Seeded from upstream `omarchy.bar` via `git subtree split --prefix=shell/plugins/bar`. Keeps full compatibility with `bar.layout`. The main bar behaves exactly like the native bar; the rails are additive.
 
-## Customizing
+- `manifest.json` declares `id: felixzsh.rails`, `kinds: ["bar"]`, `entryPoints.bar: "Bar.qml"`.
+- `Bar.qml` + `RailModel.js` + `Rails/RailPanel.qml` form the bar with rails. The `omarchy-shell` host injects `barConfig` (the `bar:` subtree from `shell.json`).
+- `RailModel.js` normalizes `bar.rails` and exposes `railThickness`, per-section helpers.
+- Rails base (`8px`) are `WlrLayer.Top` + `ExclusionMode.Auto` — they reserve `exclusive_zone` and windows re-adjust. Future deformations (pin/island/half-moon) are overlay `Ignore` and never touch `reserved` (Celestia pattern for the deformable part).
 
-The bar config lives under the `bar:` key of [`~/.config/omarchy/shell.json`](../../README.md#shelljson-shape). Out of the box the shell uses [`config/omarchy/shell.json`](../../../config/omarchy/shell.json). Once you customize anything via the bar gestures, `omarchy bar ...`, or by editing shell.json directly, your file is canonical — there is no deep-merge.
+## Installation
 
-The bar is configured directly on the bar itself: drag empty bar space (or click-and-hold) to move the bar to another screen edge, double-left-click empty center-bar space to toggle transparency, and drag widgets to reorder them. The `omarchy bar position`, `omarchy bar transparent`, `omarchy bar move`, and `omarchy bar set` commands do the same from scripts. Enable or disable widgets with `omarchy plugin enable` and `omarchy plugin disable` (widget ids come from `omarchy plugin list`).
+```bash
+omarchy plugin add https://github.com/felixzsh/omarchy-frame --enable --yes
+```
 
-Example `shell.json` (bar subtree only shown):
+## Configuration — `~/.config/omarchy/shell.json`
+
+Lives under `bar:` alongside `position`/`transparent`/`layout`. If `bar.rails` is missing, rails are disabled (main bar only).
 
 ```json
 {
@@ -28,153 +27,82 @@ Example `shell.json` (bar subtree only shown):
     "transparent": false,
     "centerAnchor": "omarchy.clock",
     "layout": {
-      "left": [
-        { "id": "omarchy.menu" },
-        { "id": "omarchy.spacer", "size": 12 },
-        { "id": "omarchy.workspaces" }
-      ],
-      "center": [
-        { "id": "omarchy.media" },
-        { "id": "omarchy.clock", "format": "HH:mm" }
-      ],
-      "right": [
-        { "id": "omarchy.audio" },
-        { "id": "omarchy.power" }
-      ]
+      "left": [{ "id": "omarchy.menu" }, { "id": "omarchy.workspaces" }],
+      "center": [{ "id": "omarchy.indicators" }, { "id": "omarchy.clock", "format": "dddd HH:mm" }],
+      "right": [{ "id": "omarchy.tray" }, { "id": "omarchy.audio" }]
+    },
+    "rails": {
+      "enabled": true,
+      "top":    { "left": [], "center": [], "right": [] },
+      "bottom": { "left": [{ "id": "omarchy.bluetooth" }], "center": [], "right": [{ "id": "omarchy.monitor", "pinned": true }] },
+      "left":   { "left": [], "center": [{ "id": "omarchy.tray", "pinned": true }], "right": [] },
+      "right":  { "left": [], "center": [{ "id": "omarchy.audio" }], "right": [] }
     }
   }
 }
 ```
 
-`centerAnchor` pins one center module to the exact horizontal/vertical center and flanks others around it. Set to an empty string to disable anchoring (the center list is centered as a group).
+- `position` still drives the main bar (`top|bottom|left|right`). The edge equal to `position` is never instantiated as a rail (`RailPanel.shouldShow` filters `edge !== position`).
+- `rails[edge][section]` are 3 lists per rail (`left/center/right`) with the same shape as `bar.layout` (`{id, ...settings, pinned?}`).
+- `pinned:true` is valid from MVP (e.g. `{ "id": "omarchy.tray", "pinned": true }`) but has no effect in MVP — reserved for post-MVP pin per section.
+- `enabled:false` or missing → main bar only (safe fallback).
 
-## Module catalogue
+> The main bar inherits everything from `omarchy.bar` (see `README.orig.md` for the full catalogue). Rails inherit ~90% — see differences below.
 
-### First-party interactive widgets
+## Rails — thickness, placement and rounding
 
-| Name | What it does | Interactions |
+- **Thickness** `railCollapsedSize = RailModel.railThickness(barSize)` → `~1/3` of `barSize` (`Style.qml:341` `bar.sizeHorizontal 26` / `sizeVertical 28` with `scale-with-font`). No token in MVP.
+- **Placement** The frame wraps the workspace and reserves its thin base:
+  - `main top` → main `0,0 1280x24` full, side rails `0,24 8x672` and `1256,24 8x672` (start after `barSize`, never steal width from main), parallel `0,696 1280x24` full.
+  - Analogous for `bottom/left/right` (`railMainInset` + `railAnchors`).
+  - Rails base are `WlrLayer.Top` + `ExclusionMode.Auto` with `exclusive_zone = 8px` — they **do** reserve and windows re-adjust (`reserved` e.g. `[8,24,8,24]`). Any future deformation (pin/island/half-moon) is overlay `Ignore` and never touches `reserved`.
+- **Rounding** `Style.cornerRadius` (`decoration:rounding`) does not affect main/parallel (straight). Only the side rails draw a half-moon at both ends (intersection with main and with parallel) via `BorderSurface`/`Shape` with `PathArc` radius `cornerRadius`. If `cornerRadius==0` they stay straight. It's the simplest hack to look rounded without clipping the main bar.
+
+## Interaction MVP — dots per section → container panel
+
+Rails never show widgets directly. Only **dots** are visible:
+
+- Per rail, **max 3 dots**, one per `left/center/right` **that has widgets** (`sectionHasWidgets`). If a section is empty, its dot is not drawn. Empty rail → 0 dots.
+- Horizontal (`top/bottom`) → centered `Row`; vertical (`left/right`) → centered `Column`; `2x2` `radius 1`, `opacity 0.35`, `barForeground`.
+- **Click** (or hover) on a dot opens a **small container panel** anchored to the dot (`PopupWindow` + `BorderSurface`, `Slide`, `WlrLayer.Top` `Ignore`):
+  - Content: the widgets of that section (`railEntries(edge, section)`) in a row parallel to the rail (`Row` for `top/bottom`, `Column` for `left/right`), each in `RailModuleSlot`.
+  - Click a widget in the panel → fires its real action (`pressModuleClickTarget`) and the panel closes (mimics a click from the main bar at that position). Click outside / `onExited` also closes it.
+
+After MVP we will explore a pinned-fixed mode per section where the rail visually widens in that section to `barSize` with a half-moon, still `Ignore`.
+
+## Widgets & compatibility
+
+- Any `id` that works in `bar.layout` works in `rails` (`omarchy.*`, `type: "command"` with `exec`, `type: "qml"` with `source`). See `README.orig.md#custom-user-modules`.
+- The same widget can be in main and in a rail at the same time (duplicated) — useful for testing. To move it, use `omarchy bar move` or edit `shell.json` directly.
+
+## Properties available to widgets
+
+Same as the native bar (`README.orig.md#bar-properties-available-to-widgets`), injected as `bar`, `moduleName`, `settings`:
+
+- `bar.foreground`, `bar.background`, `bar.urgent`, `bar.fontFamily`, `bar.position`, `bar.vertical`, `bar.barSize`, `bar.railCollapsedSize`, `bar.railExpandedSize`, `bar.run(command)`, `bar.showTooltip`/`hideTooltip`, `bar.requestPopout`/`releasePopout`
+
+Rail widgets additionally receive `railEdge`/`railSection` via `RailModuleSlot` if they need to adapt to vertical/horizontal layout.
+
+## Development
+
+See `cmds.md` (cheatsheet) and `plan.md` (design + checkboxes). Validation:
+
+```bash
+qmllint Bar.qml
+test/rails-test.sh
+test/run-upstream.sh  # 6 stable bar tests, overlay without reservation
+```
+
+To pull upstream changes: `cmds.md#3` (`git subtree split --prefix=shell/plugins/bar upstream/quattro -b bar-update && git merge bar-update`).
+
+## Differences from `omarchy.bar`
+
+| Aspect | `omarchy.bar` | `felixzsh.rails` |
 |---|---|---|
-| `omarchy.menu` | Omarchy menu launcher | left = menu · right = terminal |
-| `omarchy.workspaces` | Hyprland workspace switcher | left = focus workspace |
-| `omarchy.clock` | Date/time label + popup with a month grid, ISO week numbers, and month stepping | left = popup · right = cycle label format · middle = timezone selector |
-| `omarchy.media` | MPRIS now-playing — scrolling track + artist, cover-art popup | left = play/pause · middle = next · scroll = prev/next · right = popup |
-| `omarchy.indicators` | Manual state indicators | left = indicator action |
-| `omarchy.system-update` | Available update indicator | left = update |
-| `omarchy.tray` | System tray | hover = reveal drawer · right on chevron = manage |
-| `omarchy.weather` | Weather icon + popup with forecast | left = popup · right = full notification |
-| `omarchy.microphone` | Mic icon + scroll volume | left = mute toggle · middle = audio panel · scroll = source volume |
+| Surfaces | 1 `BarPanel` per monitor | 1 `BarPanel` + 3 `RailPanel` per monitor |
+| Hyprland reservation | `top`/`bottom`/`left`/`right` per `position` | `main` + 3 rails base (`8px`) reserve; deformations overlay |
+| Main width | Full when no side rails | Always full (`0,0 1280x24` if top), side rails start after `barSize` |
+| Rail content | N/A | Only dots per section → overlay container panel |
+| Rounding | `Style.cornerRadius` on bar | Main/parallel straight, side rails half-moon at ends |
 
-| `omarchy.audio` | Volume icon + popup with master slider, output-device picker, per-app mixer | left = popup · right = mute · middle = popup · scroll = volume |
-| `omarchy.network` | Wi-Fi/Ethernet icon + popup with Wi-Fi scan, signal, connect, DNS provider selection | left = popup |
-| `omarchy.tailscale` | Tailscale status, connection switcher, machine browser, and copy actions | left = popup · right = toggle · middle = refresh |
-| `omarchy.agents` | AI coding agent limits with pace, today, last week, and all-time model breakdown | left = panel · right = launch agent · middle = next subscription |
-| `omarchy.power` | Battery/AC icon + popup with battery stats, power profiles, and system info | left = popup · right = toggle percentage |
-| `omarchy.bluetooth` | Bluetooth icon + popup with device list, connect/disconnect, battery | left = popup · right = toggle radio |
-| `omarchy.monitor` | Brightness and laptop display controls | left = popup |
-
-The `omarchy.indicators` widget loads individual bar indicators from `indicators/`. Omit `items` (or set it to an empty array) to show all indicators in the default order, or set `items` to a subset such as `["Dnd", "Reminder", "NightLight"]`. Set `alwaysShow` to `true` to keep inactive indicators visible instead of revealing them only on hover. Multiple `omarchy.indicators` instances are allowed, so different sections can show different subsets.
-
-## Orientation
-
-All widgets work in `top`, `bottom`, `left`, and `right` positions. Popups anchor on the side opposite the bar edge, sliding into the workspace. Vertical bars use 28px width; widgets that show text fall back to compact icon-only forms (e.g. `media` hides its scrolling label).
-
-## Custom user modules
-
-The schema accepts arbitrary module ids that you provide. Set `type` to `command` for shell-driven output or `qml` for a custom QML widget. Both still go under `bar.layout.<section>` in `shell.json`.
-
-Command module:
-
-```json
-{
-  "version": 1,
-  "bar": {
-    "layout": {
-      "right": [
-        { "id": "omarchy.tray" },
-        { "id": "vpn", "type": "command", "exec": "~/.config/omarchy/bar/scripts/vpn-status", "interval": 5, "tooltip": "VPN", "onClick": "nm-connection-editor" },
-        { "id": "omarchy.audio" }
-      ]
-    }
-  }
-}
-```
-
-The command may print plain text or Waybar-style JSON, for example:
-
-```json
-{"text":"󰌆","tooltip":"Work VPN","class":"active"}
-```
-
-QML module:
-
-```json
-{
-  "version": 1,
-  "bar": {
-    "layout": {
-      "right": [
-        { "id": "gpu", "type": "qml" },
-        { "id": "omarchy.audio" }
-      ]
-    }
-  }
-}
-```
-
-Then create `~/.config/omarchy/bar/modules/gpu.qml`. If you want to store it elsewhere, add a `source` path.
-
-Custom QML modules should be an `Item` with `implicitWidth` and `implicitHeight`. They may optionally define these properties, which the bar fills after loading:
-
-```qml
-import QtQuick
-
-Item {
-  property var bar
-  property string moduleName
-  property var settings
-
-  implicitWidth: 28
-  implicitHeight: bar ? bar.barSize : 26
-
-  Text {
-    anchors.centerIn: parent
-    text: "GPU"
-    color: bar ? bar.foreground : "white"
-    font.family: bar ? bar.fontFamily : "monospace"
-    font.pixelSize: 12
-  }
-
-  MouseArea {
-    anchors.fill: parent
-    onClicked: if (bar) bar.run("omarchy-launch-or-focus-tui btop")
-  }
-}
-```
-
-## Bar properties available to widgets
-
-Widgets receive `bar` (the shell root), `moduleName` (string), and `settings` (object) injected at load time. The bar exposes:
-
-- `bar.foreground`, `bar.background`, `bar.urgent` — theme colors (live-updated)
-- `bar.fontFamily` — current monospace family
-- `bar.position` — `"top" | "bottom" | "left" | "right"`
-- `bar.vertical` — boolean shortcut
-- `bar.barSize` — 26 horizontal / 28 vertical
-- `bar.run(command)` — fire-and-forget bash exec (quote arguments with `Util.shellQuote` from `qs.Commons`)
-- `bar.showTooltip(target, text)` / `bar.hideTooltip(target)` — shared tooltip popup
-- `bar.requestPopout(owner)` / `bar.releasePopout(owner)` — one-popup-at-a-time coordinator
-
-First-party bar widgets are manifest-backed just like third-party widgets.
-Simple widgets carry sibling manifests such as `widgets/Workspaces.manifest.json`;
-richer popup plugins live in feature directories such as `../panels/audio/`,
-`../panels/network/`, and `../agents/`; and feature plugins such as
-`omarchy.menu` and `omarchy.media` declare their bar-widget entry points in their own
-`manifest.json`. Bar layout ids are namespaced, e.g. `omarchy.audio`,
-`omarchy.network`, and `omarchy.clock`.
-
-Third-party widgets ship as separate plugins under
-`~/.config/omarchy/plugins/<plugin-id>/` with their own `manifest.json`
-declaring `kinds: ["bar-widget"]` and a `barWidget` entry point. See
-[../../README.md](../../README.md) for the manifest schema. Rescan, enable,
-and place third-party plugins with `omarchy-shell shell rescanPlugins`,
-`omarchy plugin enable`, and `omarchy bar move`.
+Original docs kept in `README.orig.md`.
