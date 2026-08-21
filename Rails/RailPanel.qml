@@ -16,8 +16,9 @@ PanelWindow {
     property int thickness: 8
     property int barSize: 26
     property bool barHidden: false
-    // Whether this rail has widgets (from RailsBar filtering)
+    // Whether this rail has widgets (for future dots — not used for visibility)
     property bool hasWidgets: true
+    property bool railsEnabled: true
     // Colors from innerBar
     property color backgroundColor: Color.bar.background
     property bool transparent: false
@@ -32,7 +33,7 @@ PanelWindow {
     }
     readonly property bool isParallel: edge === opposite
     readonly property bool isSide: !isParallel && edge !== mainPosition
-    readonly property bool shouldShow: hasWidgets && edge !== mainPosition && !barHidden
+    readonly property bool shouldShow: railsEnabled && edge !== mainPosition && !barHidden
 
     visible: shouldShow && !remapGuard.remapping
     exclusionMode: ExclusionMode.Ignore

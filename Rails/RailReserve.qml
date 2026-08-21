@@ -12,11 +12,13 @@ PanelWindow {
 
     required property var screen
     required property string edge
+    property string mainPosition: "top"
     property int thickness: 8
     property bool hasWidgets: true
+    property bool railsEnabled: true
     property bool barHidden: false
 
-    readonly property bool shouldReserve: hasWidgets && !barHidden
+    readonly property bool shouldReserve: railsEnabled && edge !== mainPosition && !barHidden
 
     visible: shouldReserve && !remapGuard.remapping
     exclusionMode: shouldReserve ? ExclusionMode.Auto : ExclusionMode.Ignore

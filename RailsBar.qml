@@ -107,18 +107,18 @@ Item {
                 readonly property int thickness: RailModel.railThickness(innerBar.barSize)
                 readonly property string mainPos: innerBar.position
                 readonly property int cfgSerial: root.barConfigSerial
-
-                // Helper to check if rail should be instantiated (has widgets and not main)
-                function shouldShowEdge(edge) {
-                    // touch cfgSerial for reactivity
-                    var s = cfgSerial
-                    if (!root.railsEnabled) return false
-                    if (edge === mainPos) return false
-                    var layout = root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails[edge] : null
-                    return RailModel.hasAnyWidgets(layout)
-                }
+                // Keep cfgSerial dependency for hasWidgets
+                readonly property var _topLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["top"] : null)
+                readonly property var _bottomLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["bottom"] : null)
+                readonly property var _leftLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["left"] : null)
+                readonly property var _rightLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["right"] : null)
+                readonly property bool topHasWidgets: _topLayout ? RailModel.hasAnyWidgets(_topLayout) : false
+                readonly property bool bottomHasWidgets: _bottomLayout ? RailModel.hasAnyWidgets(_bottomLayout) : false
+                readonly property bool leftHasWidgets: _leftLayout ? RailModel.hasAnyWidgets(_leftLayout) : false
+                readonly property bool rightHasWidgets: _rightLayout ? RailModel.hasAnyWidgets(_rightLayout) : false
 
                 // Visual frame — Top Ignore, trapped only laterals, parallel full-span
+                // Ponytail: visible whenever railsEnabled && not main, even if empty (dots will differentiate later)
                 RailPanel {
                     screen: screenDelegate.screen
                     edge: "top"
@@ -126,7 +126,8 @@ Item {
                     barSize: innerBar.barSize
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
-                    hasWidgets: screenDelegate.shouldShowEdge("top")
+                    hasWidgets: screenDelegate.topHasWidgets
+                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                 }
@@ -138,7 +139,8 @@ Item {
                     barSize: innerBar.barSize
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
-                    hasWidgets: screenDelegate.shouldShowEdge("bottom")
+                    hasWidgets: screenDelegate.bottomHasWidgets
+                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                 }
@@ -150,7 +152,8 @@ Item {
                     barSize: innerBar.barSize
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
-                    hasWidgets: screenDelegate.shouldShowEdge("left")
+                    hasWidgets: screenDelegate.leftHasWidgets
+                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                 }
@@ -162,7 +165,8 @@ Item {
                     barSize: innerBar.barSize
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
-                    hasWidgets: screenDelegate.shouldShowEdge("right")
+                    hasWidgets: screenDelegate.rightHasWidgets
+                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                 }
@@ -171,32 +175,40 @@ Item {
                 RailReserve {
                     screen: screenDelegate.screen
                     edge: "top"
+                    mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.shouldShowEdge("top")
+                    hasWidgets: screenDelegate.topHasWidgets
+                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
 
                 RailReserve {
                     screen: screenDelegate.screen
                     edge: "bottom"
+                    mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.shouldShowEdge("bottom")
+                    hasWidgets: screenDelegate.bottomHasWidgets
+                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
 
                 RailReserve {
                     screen: screenDelegate.screen
                     edge: "left"
+                    mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.shouldShowEdge("left")
+                    hasWidgets: screenDelegate.leftHasWidgets
+                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
 
                 RailReserve {
                     screen: screenDelegate.screen
                     edge: "right"
+                    mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.shouldShowEdge("right")
+                    hasWidgets: screenDelegate.rightHasWidgets
+                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
             }
