@@ -29,7 +29,7 @@
 | Engine file | `Bar.qml` verbatim upstream, never edited. Wrapper is `RailsBar.qml` (entry point). |
 | Exclusivity | Rails base reserve `8px` per rail with widgets (e.g. `main top` → `reserved` `[8,24,8,8]`); future deformations `Ignore`. |
 | Rail thickness | `~1/3 barSize` (8-9px). |
-| MVP Interaction | Dots per section → container panel. **Single trigger for all rails** (`bar.rails.trigger: "hover" \| "click"`, default `hover`). |
+| MVP Interaction | Dots per section → shows widgets. **Single trigger for all rails** (`bar.rails.trigger: "hover" \| "click"`, default `hover`). |
 | Pin | Not in MVP. Post-MVP pin per section with visual widening to `barSize` (still `Ignore`). |
 | Transparency | Inherits `bar.transparent`. |
 | `barHidden` | Rails follow `innerBar.barHidden` (hide when `omarchy bar off`). `shell.bar.barHidden` is exposed from the wrapper so `notifications/Service.qml` and the host keep working. |
@@ -80,18 +80,28 @@ Notes: `rails` declares 4 edges; the edge equal to `position` is never instantia
 
 ### 3.4 Drag & drop + Container swap (MVP) — Relative to `position`
 
-- [ ] **Intra-main:** untouched in `innerBar` (reorder `bar.layout[section]` via `shell.mutateShellConfig`, already persists to `shell.json`).
-- [ ] **Intra-rail (same edge) — MVP:** rails behave like a miniature main bar (`thickness 1/3` but same `left/center/right` logic). Dragging a widget inside the container panel of one section to another section **of the same rail** (e.g. `bottom left [bluetooth]` → `bottom center`) reorders `bar.rails[edge][section]` via `RailModel.moveModuleInConfig` + `shell.mutateShellConfig` and persists to `shell.json` in real time, just like `main`. Hitbox is the third/section, drop target is the nearest section in the same rail. Implement with `BarModel.nearestDropTarget`-like helper ported to `RailModel`.
 - [ ] **Container swap (MVP):** dragging empty background of `main` or of a rail (outside dots, on the 8px rail strip itself) to another screen edge moves the **whole container** (its 3-section triplet) and swaps containers via `shell.mutateShellConfig`, persisting to `shell.json` in real time. Port `nearestScreenEdge(screenPoint,screen)` to `RailModel.js` (~15 lines, from `Bar.qml:249`) and have an own ghost in `RailsBar.qml` (do not reuse inline `BarMoveGhostPanel` from `Bar.qml`). Resolve relatively: rail(edgeA) → rail(edgeB) is `swap(rails[edgeA], rails[edgeB])`; rail(edgeA) → main(position) is `bar.position = edgeA` plus `swap(bar.layout, rails[edgeA])`; main → rail is symmetric. Verify for `main top/bottom/left/right`.
 
-### 3.5 MVP Interaction — Container panel per third (trigger configurable)
+### 3.5 MVP Interaction — Trigger per section reveals rail widgets
 
-- [ ] Single `trigger` for all (`bar.rails.trigger: "hover"|"click"`, default `hover`): **highlight always** when entering the third (`dots 0.35 → 0.6`); if `trigger=="hover"` then `hover` anywhere in the third → `showSectionPanel(edge,section)` immediately; if `trigger=="click"` hover only highlights, click anywhere in the third opens the panel. Panel stays until pointer leaves third+panel by threshold, or widget selected, or click outside.
-- [ ] `showSectionPanel(edge,section)` creates `PopupWindow` + `BorderSurface` anchored to the **third** (`anchor.window = railWindow`, `anchor.rect` = third geometry, `gravity` toward workspace, `Slide`, `WlrLayer.Top`+`Ignore`).
-- [ ] Content: `sectionEntries(edge, section)` in `RailModuleSlot` in a row parallel to the rail (`Row` if `top/bottom`, `Column` if `left/right`). Size = sum `implicitWidth/Height` + `Style.space`. Slots set `bar: innerBar` + `moduleName`/`settings` + `railEdge`/`railSection`.
-- [ ] **Click routing:** prefer `shell.summon(id)` / `innerBar.summonBarWidget(id)` (host public/duck contract, see `shell.qml:457`, `Bar.qml:500`) with guard `typeof === "function"`; if it returns `"unknown"` (widget not registered in the engine) fallback to the item shape contract (`item.open?.()` / `item.toggle?.()`). Avoid coupling to `Bar.qml:784 pressModuleClickTarget(slot)` which requires slots registered in the engine. `hideSectionPanel()` on success. Click outside / `onExited` also closes. Rail base reserves (`Auto` 8px), container panel is overlay `Ignore` and never touches `reserved`.
+> The presentation of the revealed widgets is deliberately open: this step will be iterated through multiple approaches until one feels right. The plan fixes only the expectations below — never the mechanism.
 
-### 3.6 MVP Verification — Test on all 4 `position`
+- [ ] Single `trigger` for all (`bar.rails.trigger: "hover"|"click"`, default `hover`): **highlight always** when entering the third (`dots 0.35 → 0.6`), independent of trigger; if `trigger=="hover"` then `hover` anywhere in the third activates immediately; if `trigger=="click"` hover only highlights, click anywhere in the third activates.
+- [ ] Each visible section is a trigger target: a third with at least one dot awaits its configured trigger; empty thirds highlight but never activate.
+- [ ] **Expectation on activation:** the section reveals the widgets its dots represent (1 dot = 1 widget), fully interactive like native bar widgets (hover states, tooltips, click).
+- [ ] **Expectation on widget activation (fixed):** clicking a revealed widget fires that widget's own summon through the same routing as the native bar (`innerBar.summonBarWidget(id)` / host `shell.summon`, guarded `typeof === "function"`, fallback to the item shape contract `item.open?.()` / `item.toggle?.()`; avoid coupling to `Bar.qml` pressModuleClickTarget which requires engine-registered slots) so its panel/popup opens adjacent to the rail exactly as if activated from `main`, regardless of bar/rail position.
+- [ ] **Expectation on dismissal (fixed):** with `trigger=="hover"` the reveal closes when the pointer leaves section + revealed surface; with `trigger=="click"` it closes on click outside or after a widget selection. How closure detection is implemented is up to the approach.
+- [ ] **Invariants while experimenting:** main untouched; rails' base reservation never changes (`Auto` strip stays `reserved`); anything revealed lives on overlay surfaces (`Ignore`) and never touches `reserved`; theming inherits `bar.transparent`.
+
+
+
+### 3.6:
+
+- [ ] **Intra-main:** untouched in `innerBar` (reorder `bar.layout[section]` via `shell.mutateShellConfig`, already persists to `shell.json`).
+- [ ] **Intra-rail (same edge) — MVP:** rails behave like a miniature main bar (`thickness 1/3` but same `left/center/right` logic). Dragging a widget inside the container panel of one section to another section **of the same rail** (e.g. `bottom left [bluetooth]` → `bottom center`) reorders `bar.rails[edge][section]` via `RailModel.moveModuleInConfig` + `shell.mutateShellConfig` and persists to `shell.json` in real time, just like `main`. Hitbox is the third/section, drop target is the nearest section in the same rail. Implement with `BarModel.nearestDropTarget`-like helper ported to `RailModel`.
+
+
+### 3.7 MVP Verification — Test on all 4 `position`
 
 - [ ] `qmllint RailsBar.qml Bar.qml Rails/*.qml` and `test/rails-test.sh` + `test/run-upstream.sh` 6/6 pass. `Bar.qml` is not edited → `bar-test.sh` keeps passing without patches.
 - [ ] Visual Hyprland for `main top` and `main left` (minimum): `innerBar` at `0,0` full (`1280×24` or `28×720`), side/parallel **trapped** between main and parallel touching at junctions (no overlap), `reserved` includes `8` per rail with widgets (e.g. `main top` → `[8,24,8,8]`), windows re-adjusted without covering. Validate with `hyprctl layers -j` (positions) and `hyprctl monitors -j | reserved`.
