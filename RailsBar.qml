@@ -71,8 +71,53 @@ Item {
         containerMoveScreen = null
         containerMoveSource = ""
     }
+
+    function swapRailConfigs(config, edgeA, edgeB) {
+        if (!Util.isPlainObject(config.bar)) config.bar = {}
+        if (!Util.isPlainObject(config.bar.rails)) config.bar.rails = {}
+        var rails = config.bar.rails
+        var a = RailModel.normalizeRailLayout(rails[edgeA])
+        var b = RailModel.normalizeRailLayout(rails[edgeB])
+        rails[edgeA] = b
+        rails[edgeB] = a
+    }
+
     function finishContainerMove() {
+        var src = containerMoveSource
+        var cand = containerMoveCandidate
+        var active = containerMoveActive
         clearContainerMove()
+        if (!active || !src || !cand || src === cand) return
+        if (!shell || typeof shell.mutateShellConfig !== "function") return
+
+        var mainPos = RailModel.normalizePosition(position)
+        if (src === mainPos) {
+            shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, mainPos, cand) })
+            if (innerBar && typeof innerBar.setBarPosition === "function") innerBar.setBarPosition(cand)
+        } else if (cand === mainPos) {
+            shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, src, mainPos) })
+            if (innerBar && typeof innerBar.setBarPosition === "function") innerBar.setBarPosition(src)
+        } else {
+            shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, src, cand) })
+        }
+    }
+
+    property string _barDragFrom: ""
+    Connections {
+        target: innerBar
+        function onBarMoveActiveChanged() {
+            if (innerBar.barMoveActive) {
+                root._barDragFrom = innerBar.position
+                return
+            }
+            var from = root._barDragFrom
+            root._barDragFrom = ""
+            if (!from) return
+            var to = RailModel.normalizePosition(innerBar.barMoveCandidate || innerBar.position)
+            if (to !== from && root.shell && typeof root.shell.mutateShellConfig === "function") {
+                root.shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, from, to) })
+            }
+        }
     }
 
     // Duck contract for shell.bar — aliases to innerBar (main)

@@ -137,11 +137,6 @@ PanelWindow {
         dotColor: railWindow.foregroundColor
     }
 
-    // 3.4 — drag the whole rail (long-press) like the main bar, rail-sized ghost.
-    // Sits above RailHints; forwards to moveHost (RailsBar) for candidate tracking.
-    // The rail is all background (widgets float in 3.5), so this single MouseArea
-    // owns every input; hover of the thirds goes through a HoverHandler instead
-    // of stacked MouseAreas, mirroring the native bar (CenterGestureArea + HoverHandler).
     HoverHandler {
         id: railHover
         onHoveredChanged: if (!hovered) railWindow.hoveredSection = ""
