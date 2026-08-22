@@ -26,6 +26,8 @@ PanelWindow {
     property var railLayout: ({ left: [], center: [], right: [] })
     property string trigger: "hover"
     property color foregroundColor: Color.bar.text
+    // Container swap host (RailsBar root)
+    property var moveHost: null
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
@@ -110,5 +112,78 @@ PanelWindow {
         railLayout: railWindow.railLayout
         trigger: railWindow.trigger
         dotColor: railWindow.foregroundColor
+    }
+
+    // 3.4 — drag the whole rail (long-press) like the main bar, rail-sized ghost.
+    // Sits above RailHints; forwards to moveHost (RailsBar) for candidate tracking.
+    MouseArea {
+        id: containerDragArea
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton
+        hoverEnabled: true
+        cursorShape: dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
+        pressAndHoldInterval: 200
+
+        property bool dragging: false
+        property bool suppressClick: false
+        property real pressedX: 0
+        property real pressedY: 0
+        readonly property real dragThreshold: Style.space(4)
+
+        function startDrag(x, y) {
+            if (dragging) return
+            dragging = true
+            Util.execDetached("notify-send 'Rail " + railWindow.edge + " drag'")
+            if (railWindow.moveHost) railWindow.moveHost.beginContainerMove(railWindow.edge, railWindow)
+            var scenePoint = containerDragArea.mapToItem(null, x, y)
+            var screenPoint = railWindow.windowScreenPoint(scenePoint)
+            if (railWindow.moveHost) railWindow.moveHost.updateContainerMove(screenPoint)
+        }
+
+        onPressed: function(mouse) {
+            dragging = false
+            suppressClick = false
+            pressedX = mouse.x
+            pressedY = mouse.y
+        }
+
+        onPressAndHold: function(mouse) {
+            if (!containerDragArea.pressed) return
+            startDrag(mouse.x, mouse.y)
+        }
+
+        onPositionChanged: function(mouse) {
+            if (!(mouse.buttons & Qt.LeftButton)) return
+            if (!dragging) {
+                var distance = Math.abs(mouse.x - pressedX) + Math.abs(mouse.y - pressedY)
+                if (distance < dragThreshold) return
+                startDrag(mouse.x, mouse.y)
+                return
+            }
+            var scenePoint = containerDragArea.mapToItem(null, mouse.x, mouse.y)
+            var screenPoint = railWindow.windowScreenPoint(scenePoint)
+            if (railWindow.moveHost) railWindow.moveHost.updateContainerMove(screenPoint)
+        }
+
+        onReleased: function(mouse) {
+            if (!dragging) return
+            dragging = false
+            suppressClick = true
+            if (railWindow.moveHost) railWindow.moveHost.finishContainerMove()
+            mouse.accepted = true
+        }
+
+        onCanceled: {
+            dragging = false
+            suppressClick = false
+            if (railWindow.moveHost) railWindow.moveHost.clearContainerMove()
+        }
+
+        onClicked: function(mouse) {
+            if (suppressClick) {
+                suppressClick = false
+                mouse.accepted = true
+            }
+        }
     }
 }

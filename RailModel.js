@@ -58,6 +58,18 @@ function railThickness(barSize) {
   return Math.max(4, Math.round(n / 3))
 }
 
+function nearestScreenEdge(point, screen) {
+  var nx = screen.width > 0 ? Util.clamp(point.x / screen.width, 0, 1) : 0.5
+  var ny = screen.height > 0 ? Util.clamp(point.y / screen.height, 0, 1) : 0.5
+
+  var edge = "top"
+  var best = ny
+  if (1 - ny < best) { edge = "bottom"; best = 1 - ny }
+  if (nx < best) { edge = "left"; best = nx }
+  if (1 - nx < best) { edge = "right"; best = 1 - nx }
+  return edge
+}
+
 function normalizeRailLayout(raw) {
   var out = { left: [], center: [], right: [] }
   if (!isPlainObject(raw)) return out
@@ -180,6 +192,7 @@ if (typeof module !== "undefined") {
     isPinned: isPinned,
     setPinned: setPinned,
     railThickness: railThickness,
+    nearestScreenEdge: nearestScreenEdge,
     normalizeRailLayout: normalizeRailLayout,
     normalizeRailsConfig: normalizeRailsConfig,
     normalizeFrameConfig: normalizeFrameConfig,

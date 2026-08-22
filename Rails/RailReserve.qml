@@ -29,6 +29,10 @@ PanelWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
+    // Click-through: keep the input region empty so this Overlay strip never
+    // steals the rail's drag MouseArea (which lives on the Top layer below).
+    mask: Region {}
+
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
     implicitWidth: isHorizontal ? 0 : thickness
     implicitHeight: isHorizontal ? thickness : 0

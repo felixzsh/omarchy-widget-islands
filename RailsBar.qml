@@ -1,4 +1,5 @@
 import Quickshell
+import Quickshell.Wayland
 import QtQuick
 import qs.Commons
 import qs.Ui
@@ -45,6 +46,34 @@ Item {
         }
     })
     property int barConfigSerial: 0
+
+    property bool containerMoveActive: false
+    property string containerMoveSource: ""
+    property string containerMoveCandidate: ""
+    property var containerMoveWindow: null
+    property var containerMoveScreen: null
+
+    function beginContainerMove(edge, win) {
+        containerMoveWindow = win
+        containerMoveScreen = win && win.screen ? win.screen : null
+        containerMoveSource = edge
+        containerMoveCandidate = edge
+        containerMoveActive = true
+    }
+    function updateContainerMove(screenPoint) {
+        if (!containerMoveActive || !containerMoveScreen) return
+        containerMoveCandidate = RailModel.nearestScreenEdge(screenPoint, containerMoveScreen)
+    }
+    function clearContainerMove() {
+        containerMoveActive = false
+        containerMoveCandidate = ""
+        containerMoveWindow = null
+        containerMoveScreen = null
+        containerMoveSource = ""
+    }
+    function finishContainerMove() {
+        clearContainerMove()
+    }
 
     // Duck contract for shell.bar — aliases to innerBar (main)
     readonly property alias barHidden: innerBar.barHidden
@@ -138,6 +167,7 @@ Item {
                     railLayout: screenDelegate._topLayout ? screenDelegate._topLayout : ({ left: [], center: [], right: [] })
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
+                    moveHost: root
                 }
 
                 RailPanel {
@@ -154,6 +184,7 @@ Item {
                     railLayout: screenDelegate._bottomLayout ? screenDelegate._bottomLayout : ({ left: [], center: [], right: [] })
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
+                    moveHost: root
                 }
 
                 RailPanel {
@@ -170,6 +201,7 @@ Item {
                     railLayout: screenDelegate._leftLayout ? screenDelegate._leftLayout : ({ left: [], center: [], right: [] })
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
+                    moveHost: root
                 }
 
                 RailPanel {
@@ -186,6 +218,7 @@ Item {
                     railLayout: screenDelegate._rightLayout ? screenDelegate._rightLayout : ({ left: [], center: [], right: [] })
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
+                    moveHost: root
                 }
 
                 // Invisible reservers — Overlay Auto, full-span, keep main 0,0 full while resizing workspace
@@ -229,6 +262,57 @@ Item {
                     barHidden: innerBar.barHidden
                 }
             }
+        }
+    }
+
+    component RailMoveGhostPanel: PanelWindow {
+        id: ghostWindow
+        required property var ghostScreen
+        readonly property bool screenMatches: root.containerMoveScreen === ghostScreen ||
+            (root.containerMoveScreen && ghostScreen && root.containerMoveScreen.name && ghostScreen.name && root.containerMoveScreen.name === ghostScreen.name)
+        visible: root.containerMoveActive && screenMatches
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.namespace: "omarchy-rails-move-ghost"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+
+        mask: Region {}
+
+        Repeater {
+            model: ["top", "bottom", "left", "right"]
+
+            BorderSurface {
+                required property string modelData
+                readonly property bool edgeVertical: modelData === "left" || modelData === "right"
+                readonly property int edgeSize: RailModel.railThickness(innerBar.barSize)
+
+                x: modelData === "right" ? parent.width - edgeSize : 0
+                y: modelData === "bottom" ? parent.height - edgeSize : 0
+                width: edgeVertical ? edgeSize : parent.width
+                height: edgeVertical ? parent.height : edgeSize
+                color: innerBar.transparent ? "transparent" : innerBar.background
+                borderSpec: Border.flat(innerBar.foreground, 1)
+                visible: opacity > 0
+                opacity: root.containerMoveCandidate === modelData ? (innerBar.transparent ? 0.45 : 0.7) : 0
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                }
+            }
+        }
+    }
+    Variants {
+        model: Quickshell.screens
+        delegate: Component {
+            RailMoveGhostPanel { required property var modelData; ghostScreen: modelData }
         }
     }
 }
