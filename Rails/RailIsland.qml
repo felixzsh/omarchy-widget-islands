@@ -1,13 +1,12 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import QtQuick.Shapes
 import qs.Commons
 import qs.Ui
 import "../RailModel.js" as RailModel
 
-// 3.5 experiment A — RailIsland: trapezoid island growing out of the rail edge,
-// revealing one section's widgets as fully interactive native modules.
+// 3.5 experiment A — RailIsland: rectangular tab protruding out of the rail
+// edge, revealing one section's widgets as fully interactive native modules.
 // Overlay + Ignore only: it never touches reserved, the Hyprland workspace
 // never resizes. The window overlaps the rail strip so the dots stay covered
 // while open. Show/hide is instant (no animation by design).
@@ -40,7 +39,6 @@ PanelWindow {
     // Tunables for the experiment
     readonly property int depthOut: Math.max(thickness, Math.round(barSize * 0.8))
     readonly property int totalDepth: thickness + depthOut
-    readonly property int slant: Math.min(12, Math.max(4, Math.round(thickness)))
     readonly property int pad: Style.space(3)
 
     readonly property bool horizontal: edge === "top" || edge === "bottom"
@@ -96,28 +94,11 @@ PanelWindow {
         id: islandHover
     }
 
-    Shape {
+    // The tab body: plain background rectangle, same color as the rails, so
+    // it reads as the rail itself protruding into the workspace.
+    Rectangle {
         anchors.fill: parent
-        asynchronous: false
-        ShapePath {
-            fillColor: root.backgroundColor
-            strokeColor: "transparent"
-            strokeWidth: -1
-            startX: root.horizontal ? root.slant : (root.edge === "right" ? root.width : 0)
-            startY: root.horizontal ? (root.edge === "bottom" ? root.height : 0) : root.slant
-            PathLine {
-                x: root.horizontal ? root.width - root.slant : (root.edge === "right" ? root.width : root.width)
-                y: root.horizontal ? (root.edge === "bottom" ? root.height : 0) : (root.edge === "right" ? root.height - root.slant : root.slant)
-            }
-            PathLine {
-                x: root.horizontal ? root.width : (root.edge === "right" ? 0 : root.width)
-                y: root.horizontal ? (root.edge === "bottom" ? 0 : root.height) : root.height
-            }
-            PathLine {
-                x: root.horizontal ? root.slant : 0
-                y: root.horizontal ? (root.edge === "bottom" ? 0 : root.height) : (root.edge === "right" ? root.height : root.slant)
-            }
-        }
+        color: root.backgroundColor
     }
 
     Row {
