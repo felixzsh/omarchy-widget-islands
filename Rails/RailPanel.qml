@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../RailModel.js" as RailModel
 
 // RailPanel — visual overlay (ponytail: no reservation, keeps main 0,0 full).
 // Only side rails are trapped; parallel stays full-span.
@@ -30,6 +31,16 @@ PanelWindow {
     property var moveHost: null
     // Section under the pointer (left/center/right), fed by railHover
     property string hoveredSection: ""
+    // 3.5 — host-injected for island widgets
+    property var barApi: null
+    property var widgetRegistry: null
+    property string fontFamily: ""
+    // 3.5 — the section whose island is currently revealed ("" = none)
+    property string activeSection: ""
+
+    function sectionHasEntries(section) {
+        return RailModel.sectionHasWidgets(railLayout, section)
+    }
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
@@ -42,6 +53,7 @@ PanelWindow {
     readonly property bool isParallel: edge === opposite
     readonly property bool isSide: !isParallel && edge !== mainPosition
     readonly property bool shouldShow: railsEnabled && edge !== mainPosition && !barHidden
+    onShouldShowChanged: if (!shouldShow) activeSection = ""
 
     visible: shouldShow && !remapGuard.remapping
     // Keep Ignore: Auto breaks the frame fit and never helped the drag tracking.
@@ -137,9 +149,16 @@ PanelWindow {
         dotColor: railWindow.foregroundColor
     }
 
-    HoverHandler {
+        HoverHandler {
         id: railHover
-        onHoveredChanged: if (!hovered) railWindow.hoveredSection = ""
+        onHoveredChanged: {
+            if (!hovered) {
+                railWindow.hoveredSection = ""
+                if (railWindow.trigger === "hover") hoverCloseTimer.restart()
+            } else {
+                hoverCloseTimer.stop()
+            }
+        }
         onPointChanged: {
             if (!railHover.hovered) return
             var p = railHover.point.position
@@ -156,6 +175,50 @@ PanelWindow {
                 else sec = "right"
             }
             railWindow.hoveredSection = sec
+            // 3.5 — hover trigger: reveal the island for a dotful section
+            if (railWindow.trigger === "hover" && sec !== ""
+                && RailModel.sectionHasWidgets(railWindow.railLayout, sec)) {
+                railWindow.activeSection = sec
+                hoverCloseTimer.stop()
+            }
+        }
+    }
+
+    Timer {
+        id: hoverCloseTimer
+        interval: 180
+        onTriggered: {
+            if (!railHover.hovered && !island.pointerInside)
+                railWindow.activeSection = ""
+        }
+    }
+
+    RailIsland {
+        id: island
+        screen: railWindow.screen
+        edge: railWindow.edge
+        centerFrac: {
+            var idx = ["left", "center", "right"].indexOf(railWindow.activeSection)
+            return idx < 0 ? 0.5 : (idx + 0.5) / 3
+        }
+        entries: railWindow.activeSection !== "" && railWindow.railLayout
+            ? (railWindow.railLayout[railWindow.activeSection] || [])
+            : []
+        registry: railWindow.widgetRegistry
+        barApi: railWindow.barApi
+        thickness: railWindow.thickness
+        barSize: railWindow.barSize
+        backgroundColor: railWindow.backgroundColor
+        foregroundColor: railWindow.foregroundColor
+        transparent: railWindow.transparent
+        fontFamily: railWindow.fontFamily
+        clickMode: railWindow.trigger === "click"
+        visible: railWindow.shouldShow && !remapGuard.remapping
+            && railWindow.activeSection !== "" && entries.length > 0
+        onCloseRequested: railWindow.activeSection = ""
+        onPointerInsideChanged: {
+            if (pointerInside) hoverCloseTimer.stop()
+            else if (railWindow.trigger === "hover" && !railHover.hovered) hoverCloseTimer.restart()
         }
     }
 
@@ -223,6 +286,14 @@ PanelWindow {
         onClicked: function(mouse) {
             if (suppressClick) {
                 suppressClick = false
+                mouse.accepted = true
+                return
+            }
+            // 3.5 — click trigger: toggle the island for the hovered section
+            if (railWindow.trigger === "click" && railWindow.hoveredSection !== ""
+                && RailModel.sectionHasWidgets(railWindow.railLayout, railWindow.hoveredSection)) {
+                railWindow.activeSection = railWindow.activeSection === railWindow.hoveredSection
+                    ? "" : railWindow.hoveredSection
                 mouse.accepted = true
             }
         }

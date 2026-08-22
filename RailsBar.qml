@@ -213,6 +213,9 @@ Item {
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
+                    barApi: innerBar
+                    widgetRegistry: root.barWidgetRegistry
+                    fontFamily: innerBar.fontFamily
                 }
 
                 RailPanel {
@@ -230,6 +233,9 @@ Item {
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
+                    barApi: innerBar
+                    widgetRegistry: root.barWidgetRegistry
+                    fontFamily: innerBar.fontFamily
                 }
 
                 RailPanel {
@@ -247,6 +253,9 @@ Item {
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
+                    barApi: innerBar
+                    widgetRegistry: root.barWidgetRegistry
+                    fontFamily: innerBar.fontFamily
                 }
 
                 RailPanel {
@@ -264,6 +273,9 @@ Item {
                     trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
+                    barApi: innerBar
+                    widgetRegistry: root.barWidgetRegistry
+                    fontFamily: innerBar.fontFamily
                 }
 
                 // Invisible reservers — Overlay Auto, full-span, keep main 0,0 full while resizing workspace
