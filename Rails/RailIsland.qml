@@ -57,8 +57,8 @@ PanelWindow {
     onLengthChanged: console.warn("[ISLAND]", edge, "length:", length, "· totalDepth:", totalDepth)
 
     // Tunables for the experiment. totalDepth INCLUDES the strip overlap:
-    // rail third + protrusion == 80% of main bar thickness.
-    readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.8))
+    // rail third + protrusion == 70% of main bar thickness.
+    readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.7))
     readonly property int depthOut: totalDepth - thickness
     readonly property int pad: Style.space(3)
 
