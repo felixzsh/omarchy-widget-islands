@@ -2,8 +2,9 @@ import QtQuick
 import qs.Commons
 
 // RailHints — 3 thirds per rail, one dot per widget centered in each third.
-// Hitbox = whole third (MouseArea fill), dots centered, highlight on hover.
-// Ponytail: no abstractions, just Row/Column + Repeater per spec.
+// Pure visual: hover state comes from RailPanel's HoverHandler via hoveredSection.
+// No MouseAreas here: the rail is all background, the single drag MouseArea in
+// RailPanel owns all input (mirrors the native bar's bg-drag MouseArea).
 Item {
     id: root
 
@@ -11,6 +12,8 @@ Item {
     // Layout for this edge: {left:[], center:[], right:[]}
     property var railLayout: ({ left: [], center: [], right: [] })
     property string trigger: "hover"
+    // Section under the pointer, set by RailPanel's HoverHandler
+    property string hoveredSection: ""
     // Dot color — defaults to bar text, matches bar foreground on background.
     property color dotColor: Color.bar.text
 
@@ -35,7 +38,7 @@ Item {
             width: parent.width / 3
             height: parent.height
             readonly property int dotCount: root.countFor("left")
-            readonly property bool hovered: hLeftMa.containsMouse && dotCount > 0
+            readonly property bool hovered: root.hoveredSection === "left" && dotCount > 0
 
             Row {
                 anchors.centerIn: parent
@@ -51,15 +54,6 @@ Item {
                     }
                 }
             }
-
-            MouseArea {
-                id: hLeftMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: hLeft.dotCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                // 3.5 will use hover/click to open panel; 3.3 only highlights.
-                // Keep hover detection here so future logic can rely on containsMouse.
-            }
         }
 
         // center third
@@ -68,7 +62,7 @@ Item {
             width: parent.width / 3
             height: parent.height
             readonly property int dotCount: root.countFor("center")
-            readonly property bool hovered: hCenterMa.containsMouse && dotCount > 0
+            readonly property bool hovered: root.hoveredSection === "center" && dotCount > 0
 
             Row {
                 anchors.centerIn: parent
@@ -84,13 +78,6 @@ Item {
                     }
                 }
             }
-
-            MouseArea {
-                id: hCenterMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: hCenter.dotCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-            }
         }
 
         // right third
@@ -99,7 +86,7 @@ Item {
             width: parent.width / 3
             height: parent.height
             readonly property int dotCount: root.countFor("right")
-            readonly property bool hovered: hRightMa.containsMouse && dotCount > 0
+            readonly property bool hovered: root.hoveredSection === "right" && dotCount > 0
 
             Row {
                 anchors.centerIn: parent
@@ -115,13 +102,6 @@ Item {
                     }
                 }
             }
-
-            MouseArea {
-                id: hRightMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: hRight.dotCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-            }
         }
     }
 
@@ -136,7 +116,7 @@ Item {
             width: parent.width
             height: parent.height / 3
             readonly property int dotCount: root.countFor("left")
-            readonly property bool hovered: vLeftMa.containsMouse && dotCount > 0
+            readonly property bool hovered: root.hoveredSection === "left" && dotCount > 0
 
             Column {
                 anchors.centerIn: parent
@@ -152,13 +132,6 @@ Item {
                     }
                 }
             }
-
-            MouseArea {
-                id: vLeftMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: vLeft.dotCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-            }
         }
 
         Item {
@@ -166,7 +139,7 @@ Item {
             width: parent.width
             height: parent.height / 3
             readonly property int dotCount: root.countFor("center")
-            readonly property bool hovered: vCenterMa.containsMouse && dotCount > 0
+            readonly property bool hovered: root.hoveredSection === "center" && dotCount > 0
 
             Column {
                 anchors.centerIn: parent
@@ -182,13 +155,6 @@ Item {
                     }
                 }
             }
-
-            MouseArea {
-                id: vCenterMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: vCenter.dotCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-            }
         }
 
         Item {
@@ -196,7 +162,7 @@ Item {
             width: parent.width
             height: parent.height / 3
             readonly property int dotCount: root.countFor("right")
-            readonly property bool hovered: vRightMa.containsMouse && dotCount > 0
+            readonly property bool hovered: root.hoveredSection === "right" && dotCount > 0
 
             Column {
                 anchors.centerIn: parent
@@ -211,13 +177,6 @@ Item {
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }
-            }
-
-            MouseArea {
-                id: vRightMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: vRight.dotCount > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
             }
         }
     }

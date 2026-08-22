@@ -28,6 +28,8 @@ PanelWindow {
     property color foregroundColor: Color.bar.text
     // Container swap host (RailsBar root)
     property var moveHost: null
+    // Section under the pointer (left/center/right), fed by railHover
+    property string hoveredSection: ""
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
@@ -112,16 +114,41 @@ PanelWindow {
         edge: railWindow.edge
         railLayout: railWindow.railLayout
         trigger: railWindow.trigger
+        hoveredSection: railWindow.hoveredSection
         dotColor: railWindow.foregroundColor
     }
 
     // 3.4 — drag the whole rail (long-press) like the main bar, rail-sized ghost.
     // Sits above RailHints; forwards to moveHost (RailsBar) for candidate tracking.
+    // The rail is all background (widgets float in 3.5), so this single MouseArea
+    // owns every input; hover of the thirds goes through a HoverHandler instead
+    // of stacked MouseAreas, mirroring the native bar (CenterGestureArea + HoverHandler).
+    HoverHandler {
+        id: railHover
+        onHoveredChanged: if (!hovered) railWindow.hoveredSection = ""
+        onPointChanged: {
+            if (!railHover.hovered) return
+            var p = railHover.point.position
+            var sec = ""
+            if (railWindow.isHorizontal) {
+                var thirdW = railWindow.width / 3
+                if (p.x < thirdW) sec = "left"
+                else if (p.x < thirdW * 2) sec = "center"
+                else sec = "right"
+            } else {
+                var thirdH = railWindow.height / 3
+                if (p.y < thirdH) sec = "left"
+                else if (p.y < thirdH * 2) sec = "center"
+                else sec = "right"
+            }
+            railWindow.hoveredSection = sec
+        }
+    }
+
     MouseArea {
         id: containerDragArea
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        hoverEnabled: true
         cursorShape: dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
         pressAndHoldInterval: 200
 
