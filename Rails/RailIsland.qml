@@ -25,6 +25,9 @@ PanelWindow {
     required property string edge
     // Section center along the rail axis, as 0..1 fraction
     required property real centerFrac
+    // Trapped span of the rail along its axis (between main and parallel)
+    required property int spanStart
+    required property int spanLen
     required property var entries
     required property var registry
     required property var barApi
@@ -87,12 +90,12 @@ PanelWindow {
         readonly property int crossPos: root.edge === "bottom" ? parent.height - height
             : root.edge === "right" ? parent.width - width : 0
 
-        x: root.horizontal ? Math.max(0, Math.min(
-              Math.round(root.centerFrac * parent.width - width / 2),
-              parent.width - width)) : crossPos
-        y: !root.horizontal ? Math.max(0, Math.min(
-              Math.round(root.centerFrac * parent.height - height / 2),
-              parent.height - height)) : crossPos
+        x: root.horizontal ? Math.max(root.spanStart, Math.min(
+              Math.round(root.spanStart + root.centerFrac * root.spanLen - width / 2),
+              root.spanStart + root.spanLen - width)) : crossPos
+        y: !root.horizontal ? Math.max(root.spanStart, Math.min(
+              Math.round(root.spanStart + root.centerFrac * root.spanLen - height / 2),
+              root.spanStart + root.spanLen - height)) : crossPos
         width: root.horizontal ? root.length : root.totalDepth
         height: root.horizontal ? root.totalDepth : root.length
 

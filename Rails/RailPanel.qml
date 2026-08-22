@@ -55,6 +55,14 @@ PanelWindow {
     readonly property bool shouldShow: railsEnabled && edge !== mainPosition && !barHidden
     onShouldShowChanged: if (!shouldShow) activeSection = ""
 
+    // 3.5 — trapped span of this rail along its axis (between main and the
+    // parallel rail). Islands align their tab within THIS span so they sit
+    // centered over their section's dots instead of the raw screen edge.
+    readonly property int spanStart: isHorizontal ? margins.left : margins.top
+    readonly property int spanLen: isHorizontal
+        ? Math.max(0, Math.round((screen ? screen.width : 0) - margins.left - margins.right))
+        : Math.max(0, Math.round((screen ? screen.height : 0) - margins.top - margins.bottom))
+
     visible: shouldShow && !remapGuard.remapping
     // Keep Ignore: Auto breaks the frame fit and never helped the drag tracking.
     exclusionMode: ExclusionMode.Ignore
@@ -204,6 +212,8 @@ PanelWindow {
             var idx = ["left", "center", "right"].indexOf(railWindow.activeSection)
             return idx < 0 ? 0.5 : (idx + 0.5) / 3
         }
+        spanStart: railWindow.spanStart
+        spanLen: railWindow.spanLen
         entries: railWindow.activeSection !== "" && railWindow.railLayout
             ? (railWindow.railLayout[railWindow.activeSection] || [])
             : []
