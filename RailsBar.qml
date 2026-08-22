@@ -68,6 +68,11 @@ Item {
     function debugBarGeometry() { if (innerBar && typeof innerBar.debugBarGeometry === "function") return innerBar.debugBarGeometry(); return [] }
     function panelWidgetIdAt(region, index) { if (innerBar && typeof innerBar.panelWidgetIdAt === "function") return innerBar.panelWidgetIdAt(region, index); return "" }
 
+    // Known issue: rapid bar.position switches can flicker through "top"
+    // when shell.json is read mid atomic write — FileView sees an empty file
+    // and shell/shell.qml:72 falls back to defaults for one frame. For the
+    // rails plugin this is visible as a gap/detach when flipping left↔right
+    // quickly (see: https://github.com/basecamp/omarchy/pull/7723).
     function applyBarConfig() {
         var config = Util.isPlainObject(root.barConfig) ? root.barConfig : root.fallbackBarConfig
         var railsRaw = config.rails
