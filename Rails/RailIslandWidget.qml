@@ -58,23 +58,23 @@ Item {
     // desktop), mirroring the main bar's openPanelIndicator semantics.
     Rectangle {
         readonly property int inset: Style.space(2)
-        readonly property bool horizontalRail: root.edge === "top" || root.edge === "bottom"
+        readonly property bool horizontalRail: slot.edge === "top" || slot.edge === "bottom"
 
         visible: opacity > 0
-        opacity: slot.panelOpen ? 0.9 : 0
+        opacity: slot.panelOpen ? 1.0 : 0
         color: Color.accent
         radius: Math.min(width, height) / 2
         width: horizontalRail
             ? Math.max(Style.space(10), Math.round(parent.width * 0.55))
-            : Style.space(2)
+            : 3
         height: horizontalRail
-            ? Style.space(2)
+            ? 3
             : Math.max(Style.space(10), Math.round(parent.height * 0.55))
         x: !horizontalRail
-            ? (root.edge === "left" ? parent.width - width - inset : inset)
+            ? (slot.edge === "left" ? parent.width - width - inset : inset)
             : Math.round((parent.width - width) / 2)
         y: horizontalRail
-            ? (root.edge === "top" ? parent.height - height - inset : inset)
+            ? (slot.edge === "top" ? parent.height - height - inset : inset)
             : Math.round((parent.height - height) / 2)
         z: 50
 
