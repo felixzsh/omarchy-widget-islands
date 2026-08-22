@@ -227,7 +227,33 @@ PanelWindow {
         readonly property string fontFamily: source && source.fontFamily !== "" ? source.fontFamily : fallbackFontFamily
         readonly property var shell: source ? source.shell : null
         readonly property var activePopout: source ? source.activePopout : null
-        readonly property var clickTargets: source ? source.clickTargets : null
+
+        // Island-local WidgetButtons self-register here via onBarChanged →
+        // syncClickRegistration (injectProps hands them this shim as `bar`).
+        // KeyboardPanel.dismissArea → forwardBarClick resolves these targets,
+        // so ONE click on another island widget swaps panels instead of just
+        // dismissing — same behavior as clicking another icon on the main bar.
+        property var ownClickTargets: []
+
+        function registerClickTarget(target) {
+            if (!target) return
+            var next = ownClickTargets.slice()
+            if (next.indexOf(target) !== -1) return
+            next.push(target)
+            ownClickTargets = next
+        }
+
+        function unregisterClickTarget(target) {
+            var next = ownClickTargets.filter(function(t) { return t !== target })
+            if (next.length === ownClickTargets.length) return
+            ownClickTargets = next
+        }
+
+        readonly property var clickTargets: {
+            var base = source ? source.clickTargets : null
+            if (!base || !base.length) return ownClickTargets.slice()
+            return base.concat(ownClickTargets)
+        }
 
         function targetBelongsToWindow(target, window) {
             return source ? source.targetBelongsToWindow(target, window) : false
