@@ -103,6 +103,25 @@ PanelWindow {
         }
     }
 
+    function windowScreenPoint(scenePoint) {
+        if (!screen) return scenePoint
+        var ox = 0, oy = 0
+        if (edge === "top") {
+            oy = 0
+            if (isSide) ox = mainPosition === "left" ? barSize : thickness
+        } else if (edge === "bottom") {
+            oy = screen.height - thickness
+            if (isSide) ox = mainPosition === "left" ? barSize : thickness
+        } else if (edge === "left") {
+            ox = 0
+            oy = mainPosition === "top" ? barSize : (mainPosition === "bottom" ? thickness : 0)
+        } else if (edge === "right") {
+            ox = screen.width - thickness
+            oy = mainPosition === "top" ? barSize : (mainPosition === "bottom" ? thickness : 0)
+        }
+        return { x: scenePoint.x + ox, y: scenePoint.y + oy }
+    }
+
     ScreenMoveRemap {
         id: remapGuard
         window: railWindow
