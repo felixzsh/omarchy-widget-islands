@@ -7,14 +7,17 @@ import "../RailModel.js" as RailModel
 
 // 3.5 experiment A — RailIsland: rectangular tab protruding out of the rail
 // edge, revealing one section's widgets as fully interactive native modules.
-// Overlay + Ignore only: it never touches reserved, the Hyprland workspace
-// never resizes. The window overlaps the rail strip so the dots stay covered
-// while open. Show/hide is instant (no animation by design).
 //
-// Summon adjacency: widgets are hosted INSIDE this window, so KeyboardPanel /
-// PopupCard anchor to it via anchorItem.QsWindow.window; the bar shim below
-// overrides position/vertical to this rail's edge so anything reading
-// bar.position also lands next to the rail instead of the main bar.
+// Window geometry mirrors the MAIN BAR (BarPanel): the surface spans the FULL
+// edge it lives on, flush with the screen corners. That is what makes summon
+// adjacency work — KeyboardPanel/PopupCard treat anchor-window-local coords as
+// screen coords (valid for the flush main bar, valid for us too), so panels
+// open aligned to the clicked widget exactly like from main. The visible tab
+// is painted inside at the active section's span, and `mask` limits input to
+// the tab so sibling sections stay interactive.
+//
+// Overlay + Ignore only: never touches reserved, workspace never resizes.
+// Instant show/hide (no animation by design).
 PanelWindow {
     id: root
 
@@ -47,17 +50,8 @@ PanelWindow {
     }
     signal closeRequested()
 
-    Component.onCompleted: console.warn("[ISLAND]", edge, "created · registry:",
-        root.registry ? "ok" : "NULL", "· barApi:", root.barApi ? "ok" : "NULL")
-
-    onEntriesChanged: console.warn("[ISLAND]", edge, "entries:", entries.length,
-        entries.length ? JSON.stringify(entries.map(function(e) { return RailModel.entryId(e) })) : "[]",
-        "· registry:", root.registry ? "ok" : "NULL")
-
-    onLengthChanged: console.warn("[ISLAND]", edge, "length:", length, "· totalDepth:", totalDepth)
-
-    // Tunables for the experiment. totalDepth INCLUDES the strip overlap:
-    // rail third + protrusion == 70% of main bar thickness.
+    // Tunables. totalDepth INCLUDES the strip overlap: rail third + protrusion
+    // == 70% of main bar thickness.
     readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.7))
     readonly property int depthOut: totalDepth - thickness
     readonly property int pad: Style.space(3)
@@ -65,14 +59,6 @@ PanelWindow {
     readonly property bool horizontal: edge === "top" || edge === "bottom"
     readonly property int contentLength: horizontal ? contentRow.implicitWidth : contentColumn.implicitHeight
     readonly property int length: Math.max(totalDepth, contentLength + pad * 2)
-    readonly property int xOff: horizontal
-        ? Math.max(0, Math.min(Math.round((screen ? screen.width : 0) - length),
-                               Math.round(centerFrac * (screen ? screen.width : 0) - length / 2)))
-        : 0
-    readonly property int yOff: !horizontal
-        ? Math.max(0, Math.min(Math.round((screen ? screen.height : 0) - length),
-                               Math.round(centerFrac * (screen ? screen.height : 0) - length / 2)))
-        : 0
 
     visible: false
     exclusionMode: ExclusionMode.Ignore
@@ -82,22 +68,40 @@ PanelWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
-    implicitWidth: horizontal ? length : totalDepth
-    implicitHeight: horizontal ? totalDepth : length
+    // Full-edge span, flush with the screen corners — main-bar contract.
+    implicitWidth: horizontal ? Math.round(screen ? screen.width : 0) : totalDepth
+    implicitHeight: horizontal ? totalDepth : Math.round(screen ? screen.height : 0)
 
     anchors {
         top: edge === "top" || edge === "left" || edge === "right"
+        bottom: edge === "bottom" || edge === "left" || edge === "right"
         left: edge === "top" || edge === "bottom" || edge === "left"
-        bottom: edge === "bottom"
         right: edge === "right"
     }
 
-    margins {
-        left: horizontal ? xOff : 0
-        top: !horizontal ? yOff : 0
-        right: 0
-        bottom: 0
+    // The painted, interactive tab. Placed at the active section's span,
+    // flush against the rail strip.
+    Rectangle {
+        id: tab
+
+        readonly property int crossPos: root.edge === "bottom" ? parent.height - height
+            : root.edge === "right" ? parent.width - width : 0
+
+        x: root.horizontal ? Math.max(0, Math.min(
+              Math.round(root.centerFrac * parent.width - width / 2),
+              parent.width - width)) : crossPos
+        y: !root.horizontal ? Math.max(0, Math.min(
+              Math.round(root.centerFrac * parent.height - height / 2),
+              parent.height - height)) : crossPos
+        width: root.horizontal ? root.length : root.totalDepth
+        height: root.horizontal ? root.totalDepth : root.length
+
+        color: root.backgroundColor
     }
+
+    // Input restricted to the tab: clicks elsewhere fall through (to the
+    // rails below, the desktop, or the click-catcher while armed).
+    mask: Region { item: tab }
 
     // Duck-contract shim handed to hosted widgets: mirrors innerBar except
     // position/vertical, which reflect THIS rail's edge.
@@ -115,18 +119,11 @@ PanelWindow {
         id: islandHover
     }
 
-    // The tab body: plain background rectangle, same color as the rails, so
-    // it reads as the rail itself protruding into the workspace.
-    Rectangle {
-        anchors.fill: parent
-        color: root.backgroundColor
-    }
-
     Row {
         id: contentRow
         visible: root.horizontal
         spacing: Style.space(2)
-        anchors.centerIn: parent
+        anchors.centerIn: tab
 
         Repeater {
             model: root.entries
@@ -146,7 +143,7 @@ PanelWindow {
         id: contentColumn
         visible: !root.horizontal
         spacing: Style.space(2)
-        anchors.centerIn: parent
+        anchors.centerIn: tab
 
         Repeater {
             model: root.entries
