@@ -140,6 +140,47 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.sectionHasWidgets({ left: [{id:'a'}], center: [], right: [] }, 'left'), true, 'sectionHasWidgets left true')
     assertEqual(rm.sectionHasWidgets({ left: [{id:'a'}], center: [], right: [] }, 'center'), false, 'sectionHasWidgets center false')
   }
+
+  // 3.6 — moveRailEntry (intra-rail drag & drop persistence)
+  function freshConfig() {
+    return { bar: { rails: { bottom: {
+      left: [{id:'a'}, {id:'b'}, {id:'c'}],
+      center: [{id:'x'}],
+      right: []
+    } } } }
+  }
+  if (rm.moveRailEntry) {
+    // same-section reorder forward
+    let c = freshConfig()
+    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'a', 'left', 'c'), true, 'move a before c')
+    let ids = c.bar.rails.bottom.left.map(e => e.id).join(',')
+    assertEqual(ids, 'b,a,c', 'left order after move a before c')
+    // same-section no-op (b before c == already there)
+    c = freshConfig()
+    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'b', 'left', 'c'), false, 'move b before c is identity')
+    ids = c.bar.rails.bottom.left.map(e => e.id).join(',')
+    assertEqual(ids, 'a,b,c', 'identity leaves order untouched')
+    // same-section real swap
+    c = freshConfig()
+    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'b', 'left', 'a'), true, 'move b before a swaps')
+    assertEqual(c.bar.rails.bottom.left.map(e => e.id).join(','), 'b,a,c', 'swap applied')
+    // cross-section before target
+    c = freshConfig()
+    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'a', 'center', 'x'), true, 'move a to center before x')
+    assertEqual(c.bar.rails.bottom.left.map(e => e.id).join(','), 'b,c', 'source section loses a')
+    assertEqual(c.bar.rails.bottom.center.map(e => e.id).join(','), 'a,x', 'center gains a before x')
+    // cross-section append (beforeName empty)
+    c = freshConfig()
+    rm.moveRailEntry(c, 'bottom', 'left', 'b', 'right', '')
+    assertEqual(c.bar.rails.bottom.right.map(e => e.id).join(','), 'b', 'append to empty right')
+    // drop after last target → append semantics
+    c = freshConfig()
+    rm.moveRailEntry(c, 'bottom', 'center', 'x', 'left', '')
+    assertEqual(c.bar.rails.bottom.left.map(e => e.id).join(','), 'a,b,c,x', 'x appended to left end')
+    // missing widget → false
+    c = freshConfig()
+    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'zz', 'center', ''), false, 'missing id returns false')
+  }
   }
 }
 

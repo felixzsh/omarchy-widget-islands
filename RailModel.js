@@ -182,6 +182,50 @@ function normalizeFrameConfig(raw, mainPosition) {
   return normalizeRailsConfig(raw, mainPosition)
 }
 
+// 3.6 — intra-rail widget move (mirrors Bar.qml moveModuleInConfig but scoped
+// to config.bar.rails[edge][section]). Mutates config in place; returns true
+// when something moved.
+function rawRailSection(config, edge, section) {
+  if (!isPlainObject(config.bar)) config.bar = {}
+  if (!isPlainObject(config.bar.rails)) config.bar.rails = {}
+  if (!isPlainObject(config.bar.rails[edge])) config.bar.rails[edge] = {}
+  if (!Array.isArray(config.bar.rails[edge][section])) config.bar.rails[edge][section] = []
+  return config.bar.rails[edge][section]
+}
+
+function rawRailEntryIndex(entries, name) {
+  for (var i = 0; i < entries.length; i++) {
+    if (entryId(entries[i]) === name) return i
+  }
+  return -1
+}
+
+function moveRailEntry(config, edge, fromSection, name, toSection, beforeName) {
+  var fromEntries = rawRailSection(config, edge, fromSection)
+  var toEntries = rawRailSection(config, edge, toSection)
+  var fromIndex = rawRailEntryIndex(fromEntries, name)
+  if (fromIndex < 0) return false
+
+  var toIndex = beforeName ? rawRailEntryIndex(toEntries, beforeName) : toEntries.length
+  if (toIndex < 0) toIndex = toEntries.length
+
+  if (fromSection === toSection && fromIndex === toIndex) return false
+
+  var movedEntry = fromEntries[fromIndex]
+  fromEntries.splice(fromIndex, 1)
+
+  if (fromSection === toSection && fromIndex < toIndex) toIndex -= 1
+  if (toIndex < 0) toIndex = 0
+  if (toIndex > toEntries.length) toIndex = toEntries.length
+  if (fromSection === toSection && fromIndex === toIndex) {
+    fromEntries.splice(fromIndex, 0, movedEntry)
+    return false
+  }
+
+  toEntries.splice(toIndex, 0, movedEntry)
+  return true
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isPlainObject: isPlainObject,
@@ -201,6 +245,7 @@ if (typeof module !== "undefined") {
     hasPinnedWidgets: hasPinnedWidgets,
     railLayoutFor: railLayoutFor,
     frameVisible: frameVisible,
-    railsVisible: railsVisible
+    railsVisible: railsVisible,
+    moveRailEntry: moveRailEntry
   }
 }

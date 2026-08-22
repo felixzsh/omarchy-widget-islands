@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../BarModel.js" as BarModel
 import "../RailModel.js" as RailModel
 
 // RailPanel — visual overlay (ponytail: no reservation, keeps main 0,0 full).
@@ -62,6 +63,161 @@ PanelWindow {
     readonly property int spanLen: isHorizontal
         ? Math.max(0, Math.round((screen ? screen.width : 0) - margins.left - margins.right))
         : Math.max(0, Math.round((screen ? screen.height : 0) - margins.top - margins.bottom))
+
+    // 3.6 — intra-rail widget drag & drop state (mirrors Bar.qml's barDrag*)
+    property var railDragSourceSlot: null
+    property var railDragTargetSlot: null
+    property bool railDragAfter: false
+    property var railDragTargetGeometry: null
+    property url railDragImageUrl: ""
+    property real railDragScreenX: 0
+    property real railDragScreenY: 0
+    property real railDragOffsetX: 0
+    property real railDragOffsetY: 0
+    readonly property bool railDragActive: railDragSourceSlot !== null
+    readonly property bool canMutateRail: barApi !== null && barApi.shell !== null
+        && typeof barApi.shell.mutateShellConfig === "function"
+
+    // 3.7 — acceptance zone: drops and empty-tab reveals only count while the
+    // dragged pointer sits at THIS rail's edge, inside the trapped span
+    // (+grace). Mirrors the native bar, which ignores releases outside its
+    // window — without this, every release lands somewhere.
+    readonly property int zoneGrace: Style.space(6)
+    function pointerInRailZone(pEdge, px, py) {
+        var sw = screen ? screen.width : 0
+        var sh = screen ? screen.height : 0
+        var depth = Math.max(thickness + 2, Math.round(barSize * 0.7)) + zoneGrace
+        var start = spanStart - zoneGrace
+        var end = spanStart + spanLen + zoneGrace
+        if (pEdge === "top") return py <= depth && px >= start && px <= end
+        if (pEdge === "bottom") return py >= sh - depth && px >= start && px <= end
+        if (pEdge === "left") return px <= depth && py >= start && py <= end
+        return px >= sw - depth && py >= start && py <= end
+    }
+
+    function clearRailDrag() {
+        railDragSourceSlot = null
+        railDragTargetSlot = null
+        railDragAfter = false
+        railDragTargetGeometry = null
+        railDragImageUrl = ""
+        railDragScreenX = 0
+        railDragScreenY = 0
+        railDragOffsetX = 0
+        railDragOffsetY = 0
+    }
+
+    function beginRailDrag(slot, pressedX, pressedY) {
+        if (!slot || railDragActive) return
+        railDragOffsetX = pressedX
+        railDragOffsetY = pressedY
+        railDragImageUrl = ""
+        var item = slot.activeItem
+        if (item && typeof item.grabToImage === "function") {
+            var gw = Math.max(1, Math.ceil(item.width || item.implicitWidth || slot.width || 1))
+            var gh = Math.max(1, Math.ceil(item.height || item.implicitHeight || slot.height || 1))
+            item.grabToImage(function(result) {
+                if (railDragSourceSlot !== slot || !result || !result.url) return
+                railDragImageUrl = result.url
+            }, Qt.size(gw, gh))
+        }
+        console.warn("[RAIL]", edge, "widget-drag begin:", slot.moduleName)
+        railDragSourceSlot = slot
+    }
+
+    function updateRailDrag(slot, scenePoint) {
+        if (!railDragActive || slot !== railDragSourceSlot) return
+
+        var srcIsl = railDragSourceSlot.host
+        var so = srcIsl ? srcIsl.screenOrigin() : { x: 0, y: 0 }
+        railDragScreenX = so.x + scenePoint.x
+        railDragScreenY = so.y + scenePoint.y
+
+        // Drop candidates: every visible slot across this rail's islands,
+        // expressed in SCREEN coords (islands are separate windows but all
+        // flush with their edge, so origin + local == screen).
+        var candidates = []
+        for (var i = 0; i < islands.length; i++) {
+            var isl = islands[i]
+            if (!isl || !isl.visible) continue
+            var io = isl.screenOrigin()
+            var islandCandidates = 0
+            for (var j = 0; j < isl.moduleSlots.length; j++) {
+                var s = isl.moduleSlots[j]
+                if (!s || s === slot || !s.visible || s.width <= 0 || s.height <= 0) continue
+                var sp = { x: 0, y: 0 }
+                try { sp = s.mapToItem(null, 0, 0) } catch (e) { continue }
+                candidates.push({ slot: s, x: io.x + sp.x, y: io.y + sp.y, width: s.width, height: s.height })
+                islandCandidates++
+            }
+            // No droppable slot left (empty section, or source was the only
+            // widget): whole tab is the append zone; dropping back home is a
+            // no-op.
+            if (islandCandidates === 0) {
+                var tp = isl.tabPoint()
+                candidates.push({
+                    slot: isl.placeholderTarget,
+                    x: io.x + tp.x, y: io.y + tp.y,
+                    width: isl.placeholderTarget.width, height: isl.placeholderTarget.height
+                })
+            }
+        }
+
+        var drop = BarModel.nearestDropTarget(
+            candidates, { x: railDragScreenX, y: railDragScreenY }, !isHorizontal)
+        // Outside this rail's zone nothing is a target: releasing there
+        // cancels the move, same as releasing off the native bar.
+        if (drop && !pointerInRailZone(edge, railDragScreenX, railDragScreenY)) drop = null
+        railDragTargetSlot = drop ? drop.slot : null
+        railDragAfter = drop ? drop.after : false
+        railDragTargetGeometry = drop ? railDropMarkerRect(drop.slot, drop.after) : null
+    }
+
+    function railDropMarkerRect(targetSlot, after) {
+        if (!targetSlot || !targetSlot.host) return null
+        var isl = targetSlot.host
+        var io = isl.screenOrigin()
+        var p
+        if (targetSlot.isPlaceholder) p = isl.tabPoint()
+        else {
+            try { p = targetSlot.mapToItem(null, 0, 0) } catch (e) { return null }
+        }
+        var sx = io.x + p.x
+        var sy = io.y + p.y
+        var th = Style.spacing.xs
+        if (!isl.horizontal) {
+            return { x: sx, y: sy + (after ? targetSlot.height : 0) - th / 2,
+                     width: targetSlot.width, height: th }
+        }
+        return { x: sx + (after ? targetSlot.width : 0) - th / 2, y: sy,
+                 width: th, height: targetSlot.height }
+    }
+
+    function finishRailDrag() {
+        var src = railDragSourceSlot
+        var tgt = railDragTargetSlot
+        var after = railDragAfter
+        clearRailDrag()
+        if (!src || !tgt || !canMutateRail) return
+
+        // beforeName: the entry the moved widget lands BEFORE. Dropping "after"
+        // the target means before its next sibling ("append" when none).
+        var beforeName = tgt.moduleName
+        if (after) {
+            beforeName = ""
+            var arr = railLayout[tgt.section] || []
+            for (var i = 0; i < arr.length; i++) {
+                if (RailModel.entryId(arr[i]) === tgt.moduleName && i + 1 < arr.length) {
+                    beforeName = RailModel.entryId(arr[i + 1])
+                    break
+                }
+            }
+        }
+
+        barApi.shell.mutateShellConfig(function(config) {
+            RailModel.moveRailEntry(config, edge, src.section, src.moduleName, tgt.section, beforeName)
+        })
+    }
 
     visible: shouldShow && !remapGuard.remapping
     // Keep Ignore: Auto breaks the frame fit and never helped the drag tracking.
@@ -184,7 +340,9 @@ PanelWindow {
             }
             railWindow.hoveredSection = sec
             // 3.5 — hover trigger: reveal the island for a dotful section
-            if (sec !== "" && sec !== railWindow.activeSection
+            // (frozen while a widget is being dragged)
+            if (sec !== "" && !railWindow.railDragActive
+                && sec !== railWindow.activeSection
                 && RailModel.sectionHasWidgets(railWindow.railLayout, sec)) {
                 console.warn("[RAIL]", railWindow.edge, "hover-activate:", sec)
                 if (railWindow.trigger === "hover") {
@@ -199,48 +357,152 @@ PanelWindow {
         id: hoverCloseTimer
         interval: 180
         onTriggered: {
-            if (!railHover.hovered && !island.pointerInside && !island.pinnedByPanel)
-                railWindow.activeSection = ""
+            if (railWindow.railDragActive) return
+            if (railHover.hovered) return
+            for (var i = 0; i < islands.length; i++) {
+                var isl = islands[i]
+                if (isl && (isl.pointerInside || isl.pinnedByPanel)) return
+            }
+            railWindow.activeSection = ""
         }
     }
 
-    RailIsland {
-        id: island
+    // Islands registry — Variants can't enumerate its own instances, so
+    // islands self-register here (same pattern as moduleSlots).
+    property var islands: []
+    function registerIsland(isl) {
+        if (!isl) return
+        var next = islands.slice()
+        if (next.indexOf(isl) !== -1) return
+        next.push(isl)
+        islands = next
+    }
+    function unregisterIsland(isl) {
+        var next = islands.filter(function(t) { return t !== isl })
+        if (next.length === islands.length) return
+        islands = next
+    }
+
+    // One island per section. Normal mode reveals only activeSection; during a
+    // rail widget drag ALL populated sections reveal at once — the affordance
+    // that says "you can drop it there".
+    //
+    // Variants, not Repeater: these are PANEL WINDOWS, and Quickshell only
+    // creates real layer surfaces through Variants (same as Bar.qml per-screen
+    // windows). A Repeater of PanelWindows silently never maps.
+    Variants {
+        model: ["left", "center", "right"]
+
+        delegate: Component {
+            RailIsland {
+                required property string modelData
+
+                screen: railWindow.screen
+                edge: railWindow.edge
+                section: modelData
+                centerFrac: (["left", "center", "right"].indexOf(modelData) + 0.5) / 3
+                spanStart: railWindow.spanStart
+                spanLen: railWindow.spanLen
+                entries: railWindow.railLayout ? (railWindow.railLayout[modelData] || []) : []
+                registry: railWindow.widgetRegistry
+                barApi: railWindow.barApi
+                thickness: railWindow.thickness
+                barSize: railWindow.barSize
+                backgroundColor: railWindow.backgroundColor
+                foregroundColor: railWindow.foregroundColor
+                transparent: railWindow.transparent
+                fontFamily: railWindow.fontFamily
+                clickMode: railWindow.trigger === "click"
+                dragHost: railWindow
+                visible: railWindow.shouldShow && !remapGuard.remapping
+                    && (railWindow.railDragActive
+                        || (railWindow.activeSection === modelData && entries.length > 0))
+                onCloseRequested: if (!railWindow.railDragActive) railWindow.activeSection = ""
+                onPointerInsideChanged: {
+                    if (pointerInside) hoverCloseTimer.stop()
+                    else if (railWindow.trigger === "hover" && !railHover.hovered && !pinnedByPanel)
+                        hoverCloseTimer.restart()
+                }
+                onPinnedByPanelChanged: {
+                    // Panel closed → resume normal dismissal only if pointer is gone
+                    if (pinnedByPanel) hoverCloseTimer.stop()
+                    else if (railWindow.trigger === "hover" && !railHover.hovered && !pointerInside)
+                        hoverCloseTimer.restart()
+                }
+            }
+        }
+    }
+
+    // 3.6 — drag feedback overlay (mirrors Bar.qml's DragGhostPanel): the
+    // grabbed widget follows the cursor and an accent line marks where it
+    // would land. Visual-only: empty input region keeps the pointer grab with
+    // the MouseArea that started the drag.
+    component RailDragGhostPanel: PanelWindow {
+        id: ghostWindow
+
+        readonly property bool active: railWindow.railDragActive
+        readonly property var sourceItem: railWindow.railDragSourceSlot
+            ? railWindow.railDragSourceSlot.activeItem : null
+        readonly property int ghostPadding: Style.space(1)
+        readonly property int ghostWidth: sourceItem ? Math.max(1, Math.ceil(sourceItem.width)) : 1
+        readonly property int ghostHeight: sourceItem ? Math.max(1, Math.ceil(sourceItem.height)) : 1
+
+        visible: active && sourceItem !== null
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.namespace: "omarchy-rails-drag-ghost-" + railWindow.edge
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        surfaceFormat.opaque: false
+
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+
+        mask: Region {}
+
+        Item {
+            x: Math.round(railWindow.railDragScreenX - railWindow.railDragOffsetX - ghostWindow.ghostPadding)
+            y: Math.round(railWindow.railDragScreenY - railWindow.railDragOffsetY - ghostWindow.ghostPadding)
+            width: ghostWindow.ghostWidth + ghostWindow.ghostPadding * 2
+            height: ghostWindow.ghostHeight + ghostWindow.ghostPadding * 2
+
+            BorderSurface {
+                anchors.fill: parent
+                color: railWindow.transparent ? "transparent" : railWindow.backgroundColor
+                borderSpec: Border.flat(railWindow.foregroundColor, 1)
+                radius: Math.min(Style.cornerRadius, height / 2)
+                opacity: railWindow.transparent ? 0.45 : 0.94
+            }
+
+            Image {
+                anchors.fill: parent
+                anchors.margins: ghostWindow.ghostPadding
+                source: railWindow.railDragImageUrl
+                fillMode: Image.Stretch
+                smooth: true
+                opacity: 0.84
+            }
+        }
+
+        Rectangle {
+            readonly property var targetRect: railWindow.railDragTargetGeometry
+
+            visible: ghostWindow.active && targetRect !== null
+            x: targetRect ? Math.round(targetRect.x) : 0
+            y: targetRect ? Math.round(targetRect.y) : 0
+            width: targetRect ? targetRect.width : 0
+            height: targetRect ? targetRect.height : 0
+            color: Color.accent
+            radius: Math.min(width, height) / 2
+        }
+    }
+
+    RailDragGhostPanel {
         screen: railWindow.screen
-        edge: railWindow.edge
-        centerFrac: {
-            var idx = ["left", "center", "right"].indexOf(railWindow.activeSection)
-            return idx < 0 ? 0.5 : (idx + 0.5) / 3
-        }
-        spanStart: railWindow.spanStart
-        spanLen: railWindow.spanLen
-        entries: railWindow.activeSection !== "" && railWindow.railLayout
-            ? (railWindow.railLayout[railWindow.activeSection] || [])
-            : []
-        registry: railWindow.widgetRegistry
-        barApi: railWindow.barApi
-        thickness: railWindow.thickness
-        barSize: railWindow.barSize
-        backgroundColor: railWindow.backgroundColor
-        foregroundColor: railWindow.foregroundColor
-        transparent: railWindow.transparent
-        fontFamily: railWindow.fontFamily
-        clickMode: railWindow.trigger === "click"
-        visible: railWindow.shouldShow && !remapGuard.remapping
-            && railWindow.activeSection !== "" && entries.length > 0
-        onCloseRequested: railWindow.activeSection = ""
-        onPointerInsideChanged: {
-            if (pointerInside) hoverCloseTimer.stop()
-            else if (railWindow.trigger === "hover" && !railHover.hovered && !pinnedByPanel)
-                hoverCloseTimer.restart()
-        }
-        onPinnedByPanelChanged: {
-            // Panel closed → resume normal dismissal only if pointer is gone
-            if (!pinnedByPanel && railWindow.trigger === "hover"
-                && !railHover.hovered && !pointerInside)
-                hoverCloseTimer.restart()
-            if (pinnedByPanel) hoverCloseTimer.stop()
-        }
     }
 
     MouseArea {

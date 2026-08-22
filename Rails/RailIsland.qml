@@ -37,6 +37,9 @@ PanelWindow {
     required property color foregroundColor
     required property bool transparent
     required property string fontFamily
+    // 3.6 — which section this island reveals + RailPanel drag API
+    required property string section
+    required property var dragHost
     property bool clickMode: false
 
     readonly property bool pointerInside: islandHover.hovered
@@ -53,11 +56,63 @@ PanelWindow {
     }
     signal closeRequested()
 
+    // Self-register into the RailPanel's islands list (Variants can't be
+    // enumerated from outside; the drag machinery and dismissal timer need
+    // to iterate live islands).
+    Component.onCompleted: if (dragHost && dragHost.registerIsland) dragHost.registerIsland(root)
+    Component.onDestruction: if (dragHost && dragHost.unregisterIsland) dragHost.unregisterIsland(root)
+
     // Tunables. totalDepth INCLUDES the strip overlap: rail third + protrusion
     // == 70% of main bar thickness.
     readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.7))
     readonly property int depthOut: totalDepth - thickness
     readonly property int pad: Style.space(3)
+
+    // 3.6 — window origin in screen coords (full-edge span, flush corners).
+    // NOTE: the window's own width/height are NOT screen-sized on every edge
+    // (the bottom island is a thin horizontal strip, the right island a thin
+    // vertical one) — always derive from the SCREEN, never from this window.
+    function screenOrigin() {
+        var sw = screen ? screen.width : 0
+        var sh = screen ? screen.height : 0
+        var x = 0
+        var y = 0
+        if (edge === "bottom") y = sh - totalDepth
+        else if (edge === "right") x = sw - totalDepth
+        return { x: x, y: y }
+    }
+
+    // Tab geometry in window-local coords.
+    function tabPoint() {
+        var p = tab.mapToItem(null, 0, 0)
+        return { x: p.x, y: p.y }
+    }
+
+    // Synthetic drop target for an empty section: the whole tab is the zone.
+    readonly property var placeholderTarget: ({
+        isPlaceholder: true,
+        host: root,
+        section: root.section,
+        moduleName: "",
+        width: tab.width,
+        height: tab.height
+    })
+
+    // 3.6 — hosted widget slots, registered by RailIslandWidget so the drag
+    // machinery can collect drop candidates across all revealed islands.
+    property var moduleSlots: []
+    function registerModuleSlot(s) {
+        if (!s) return
+        var next = moduleSlots.slice()
+        if (next.indexOf(s) !== -1) return
+        next.push(s)
+        moduleSlots = next
+    }
+    function unregisterModuleSlot(s) {
+        var next = moduleSlots.filter(function(t) { return t !== s })
+        if (next.length === moduleSlots.length) return
+        moduleSlots = next
+    }
 
     readonly property bool horizontal: edge === "top" || edge === "bottom"
     readonly property int contentLength: horizontal ? contentRow.implicitWidth : contentColumn.implicitHeight
@@ -129,16 +184,18 @@ PanelWindow {
         anchors.centerIn: tab
 
         Repeater {
-            model: root.entries
+            // Only the active orientation instantiates delegates (the other
+            // container is hidden; duplicating widgets would double-register
+            // drag slots).
+            model: root.horizontal ? root.entries : []
             delegate: RailIslandWidget {
                 registry: root.registry
                 barObj: railBar
                 edge: root.edge
+                host: root
+                dragHost: root.dragHost
+                section: root.section
             }
-            onItemAdded: function(index, item) {
-                console.warn("[ISLAND] delegate added:", index, item.moduleName)
-            }
-            onCountChanged: console.warn("[ISLAND]", root.edge, "row repeater count:", count)
         }
     }
 
@@ -149,16 +206,15 @@ PanelWindow {
         anchors.centerIn: tab
 
         Repeater {
-            model: root.entries
+            model: !root.horizontal ? root.entries : []
             delegate: RailIslandWidget {
                 registry: root.registry
                 barObj: railBar
                 edge: root.edge
+                host: root
+                dragHost: root.dragHost
+                section: root.section
             }
-            onItemAdded: function(index, item) {
-                console.warn("[ISLAND] delegate added:", index, item.moduleName)
-            }
-            onCountChanged: console.warn("[ISLAND]", root.edge, "column repeater count:", count)
         }
     }
 
@@ -205,6 +261,7 @@ PanelWindow {
     IslandCatcher {
         catcherScreen: root.screen
         visible: root.visible && root.clickMode && root.catcherArmed
+            && !(root.dragHost && root.dragHost.railDragActive)
     }
 
     // Duck-contract proxy over the main bar. Everything delegates to innerBar
