@@ -42,6 +42,7 @@ PanelWindow {
     readonly property bool shouldShow: railsEnabled && edge !== mainPosition && !barHidden
 
     visible: shouldShow && !remapGuard.remapping
+    // Keep Ignore: Auto breaks the frame fit and never helped the drag tracking.
     exclusionMode: ExclusionMode.Ignore
 
     WlrLayershell.namespace: "omarchy-rails-" + edge
