@@ -176,10 +176,13 @@ PanelWindow {
             }
             railWindow.hoveredSection = sec
             // 3.5 — hover trigger: reveal the island for a dotful section
-            if (railWindow.trigger === "hover" && sec !== ""
+            if (sec !== "" && sec !== railWindow.activeSection
                 && RailModel.sectionHasWidgets(railWindow.railLayout, sec)) {
-                railWindow.activeSection = sec
-                hoverCloseTimer.stop()
+                console.warn("[RAIL]", railWindow.edge, "hover-activate:", sec)
+                if (railWindow.trigger === "hover") {
+                    railWindow.activeSection = sec
+                    hoverCloseTimer.stop()
+                }
             }
         }
     }
@@ -188,7 +191,7 @@ PanelWindow {
         id: hoverCloseTimer
         interval: 180
         onTriggered: {
-            if (!railHover.hovered && !island.pointerInside)
+            if (!railHover.hovered && !island.pointerInside && !island.pinnedByPanel)
                 railWindow.activeSection = ""
         }
     }
@@ -218,7 +221,15 @@ PanelWindow {
         onCloseRequested: railWindow.activeSection = ""
         onPointerInsideChanged: {
             if (pointerInside) hoverCloseTimer.stop()
-            else if (railWindow.trigger === "hover" && !railHover.hovered) hoverCloseTimer.restart()
+            else if (railWindow.trigger === "hover" && !railHover.hovered && !pinnedByPanel)
+                hoverCloseTimer.restart()
+        }
+        onPinnedByPanelChanged: {
+            // Panel closed → resume normal dismissal only if pointer is gone
+            if (!pinnedByPanel && railWindow.trigger === "hover"
+                && !railHover.hovered && !pointerInside)
+                hoverCloseTimer.restart()
+            if (pinnedByPanel) hoverCloseTimer.stop()
         }
     }
 

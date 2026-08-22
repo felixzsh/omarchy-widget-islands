@@ -34,11 +34,32 @@ PanelWindow {
     property bool clickMode: false
 
     readonly property bool pointerInside: islandHover.hovered
+    // While any hosted widget has its panel open, the island is pinned:
+    // hover-leave must not dismiss it (the widget lives here — closing the
+    // island would kill its panel).
+    readonly property bool pinnedByPanel: {
+        var kids = horizontal ? contentRow.children : contentColumn.children
+        for (var i = 0; i < kids.length; i++) {
+            var k = kids[i]
+            if (k && k.panelOpen === true) return true
+        }
+        return false
+    }
     signal closeRequested()
 
-    // Tunables for the experiment
-    readonly property int depthOut: Math.max(thickness, Math.round(barSize * 0.8))
-    readonly property int totalDepth: thickness + depthOut
+    Component.onCompleted: console.warn("[ISLAND]", edge, "created · registry:",
+        root.registry ? "ok" : "NULL", "· barApi:", root.barApi ? "ok" : "NULL")
+
+    onEntriesChanged: console.warn("[ISLAND]", edge, "entries:", entries.length,
+        entries.length ? JSON.stringify(entries.map(function(e) { return RailModel.entryId(e) })) : "[]",
+        "· registry:", root.registry ? "ok" : "NULL")
+
+    onLengthChanged: console.warn("[ISLAND]", edge, "length:", length, "· totalDepth:", totalDepth)
+
+    // Tunables for the experiment. totalDepth INCLUDES the strip overlap:
+    // rail third + protrusion == 80% of main bar thickness.
+    readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.8))
+    readonly property int depthOut: totalDepth - thickness
     readonly property int pad: Style.space(3)
 
     readonly property bool horizontal: edge === "top" || edge === "bottom"
@@ -109,7 +130,15 @@ PanelWindow {
 
         Repeater {
             model: root.entries
-            delegate: islandWidgetDelegate
+            delegate: RailIslandWidget {
+                registry: root.registry
+                barObj: railBar
+                edge: root.edge
+            }
+            onItemAdded: function(index, item) {
+                console.warn("[ISLAND] delegate added:", index, item.moduleName)
+            }
+            onCountChanged: console.warn("[ISLAND]", root.edge, "row repeater count:", count)
         }
     }
 
@@ -121,33 +150,15 @@ PanelWindow {
 
         Repeater {
             model: root.entries
-            delegate: islandWidgetDelegate
-        }
-    }
-
-    component IslandWidget: Item {
-        required property var modelData
-        readonly property string moduleName: RailModel.entryId(modelData)
-        readonly property var moduleSettings: RailModel.entrySettings(modelData)
-        readonly property string canonicalName: Util.canonicalWidgetId(moduleName)
-        readonly property var registryComponent: {
-            var w = root.registry && root.registry.widgets
-            return (w && w[canonicalName]) ? w[canonicalName].component : null
-        }
-        implicitWidth: widgetLoader.item ? widgetLoader.item.implicitWidth : 0
-        implicitHeight: widgetLoader.item ? widgetLoader.item.implicitHeight : 0
-
-        Loader {
-            id: widgetLoader
-            anchors.centerIn: parent
-            active: parent.registryComponent !== null
-            sourceComponent: parent.registryComponent
-            onLoaded: {
-                if (!item) return
-                if ("bar" in item) item.bar = railBar
-                if ("moduleName" in item) item.moduleName = parent.moduleName
-                if ("settings" in item) item.settings = parent.moduleSettings
+            delegate: RailIslandWidget {
+                registry: root.registry
+                barObj: railBar
+                edge: root.edge
             }
+            onItemAdded: function(index, item) {
+                console.warn("[ISLAND] delegate added:", index, item.moduleName)
+            }
+            onCountChanged: console.warn("[ISLAND]", root.edge, "column repeater count:", count)
         }
     }
 
