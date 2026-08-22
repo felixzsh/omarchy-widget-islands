@@ -135,6 +135,9 @@ Item {
                     railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
+                    railLayout: screenDelegate._topLayout ? screenDelegate._topLayout : ({ left: [], center: [], right: [] })
+                    trigger: root.railsTrigger
+                    foregroundColor: innerBar.foreground
                 }
 
                 RailPanel {
@@ -148,6 +151,9 @@ Item {
                     railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
+                    railLayout: screenDelegate._bottomLayout ? screenDelegate._bottomLayout : ({ left: [], center: [], right: [] })
+                    trigger: root.railsTrigger
+                    foregroundColor: innerBar.foreground
                 }
 
                 RailPanel {
@@ -161,6 +167,9 @@ Item {
                     railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
+                    railLayout: screenDelegate._leftLayout ? screenDelegate._leftLayout : ({ left: [], center: [], right: [] })
+                    trigger: root.railsTrigger
+                    foregroundColor: innerBar.foreground
                 }
 
                 RailPanel {
@@ -174,6 +183,9 @@ Item {
                     railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
+                    railLayout: screenDelegate._rightLayout ? screenDelegate._rightLayout : ({ left: [], center: [], right: [] })
+                    trigger: root.railsTrigger
+                    foregroundColor: innerBar.foreground
                 }
 
                 // Invisible reservers — Overlay Auto, full-span, keep main 0,0 full while resizing workspace

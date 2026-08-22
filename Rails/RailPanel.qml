@@ -22,6 +22,10 @@ PanelWindow {
     // Colors from innerBar
     property color backgroundColor: Color.bar.background
     property bool transparent: false
+    // Hints data — per-edge layout for 3 thirds
+    property var railLayout: ({ left: [], center: [], right: [] })
+    property string trigger: "hover"
+    property color foregroundColor: Color.bar.text
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
@@ -97,5 +101,14 @@ PanelWindow {
     ScreenMoveRemap {
         id: remapGuard
         window: railWindow
+    }
+
+    // 3.3 — hints: one dot per widget centered in each third, hitbox = whole third
+    RailHints {
+        anchors.fill: parent
+        edge: railWindow.edge
+        railLayout: railWindow.railLayout
+        trigger: railWindow.trigger
+        dotColor: railWindow.foregroundColor
     }
 }
