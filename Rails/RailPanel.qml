@@ -133,7 +133,6 @@ PanelWindow {
         function startDrag(x, y) {
             if (dragging) return
             dragging = true
-            Util.execDetached("notify-send 'Rail " + railWindow.edge + " drag'")
             if (railWindow.moveHost) railWindow.moveHost.beginContainerMove(railWindow.edge, railWindow)
             var scenePoint = containerDragArea.mapToItem(null, x, y)
             var screenPoint = railWindow.windowScreenPoint(scenePoint)
