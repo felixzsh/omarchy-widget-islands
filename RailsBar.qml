@@ -33,7 +33,6 @@ Item {
     })
 
     // Rails state — parsed from bar.rails
-    property bool railsEnabled: false
     property string railsTrigger: "hover"
     property var normalizedRails: ({
         enabled: false,
@@ -186,7 +185,6 @@ Item {
         var railsRaw = config.rails
         var pos = config.position
         var parsed = RailModel.normalizeRailsConfig(railsRaw, pos)
-        railsEnabled = parsed.enabled
         railsTrigger = parsed.trigger
         normalizedRails = parsed
         barConfigSerial++
@@ -231,7 +229,7 @@ Item {
                 readonly property bool rightHasWidgets: _rightLayout ? RailModel.hasAnyWidgets(_rightLayout) : false
 
                 // Visual frame — Top Ignore, trapped only laterals, parallel full-span
-                // Ponytail: visible whenever railsEnabled && not main, even if empty (dots will differentiate later)
+                // Ponytail: always visible when not main, even if empty (dots will differentiate later)
                 RailPanel {
                     screen: screenDelegate.screen
                     edge: "top"
@@ -240,7 +238,6 @@ Item {
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
                     hasWidgets: screenDelegate.topHasWidgets
-                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._topLayout ? screenDelegate._topLayout : ({ left: [], center: [], right: [] })
@@ -260,7 +257,6 @@ Item {
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
                     hasWidgets: screenDelegate.bottomHasWidgets
-                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._bottomLayout ? screenDelegate._bottomLayout : ({ left: [], center: [], right: [] })
@@ -280,7 +276,6 @@ Item {
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
                     hasWidgets: screenDelegate.leftHasWidgets
-                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._leftLayout ? screenDelegate._leftLayout : ({ left: [], center: [], right: [] })
@@ -300,7 +295,6 @@ Item {
                     thickness: screenDelegate.thickness
                     barHidden: innerBar.barHidden
                     hasWidgets: screenDelegate.rightHasWidgets
-                    railsEnabled: root.railsEnabled
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._rightLayout ? screenDelegate._rightLayout : ({ left: [], center: [], right: [] })
@@ -319,7 +313,6 @@ Item {
                     mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
                     hasWidgets: screenDelegate.topHasWidgets
-                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
 
@@ -329,7 +322,6 @@ Item {
                     mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
                     hasWidgets: screenDelegate.bottomHasWidgets
-                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
 
@@ -339,7 +331,6 @@ Item {
                     mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
                     hasWidgets: screenDelegate.leftHasWidgets
-                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
 
@@ -349,7 +340,6 @@ Item {
                     mainPosition: screenDelegate.mainPos
                     thickness: screenDelegate.thickness
                     hasWidgets: screenDelegate.rightHasWidgets
-                    railsEnabled: root.railsEnabled
                     barHidden: innerBar.barHidden
                 }
             }

@@ -20,7 +20,6 @@ PanelWindow {
     property bool barHidden: false
     // Whether this rail has widgets (for future dots — not used for visibility)
     property bool hasWidgets: true
-    property bool railsEnabled: true
     // Colors from innerBar
     property color backgroundColor: Color.bar.background
     property bool transparent: false
@@ -58,7 +57,9 @@ PanelWindow {
     }
     readonly property bool isParallel: edge === opposite
     readonly property bool isSide: !isParallel && edge !== mainPosition
-    readonly property bool shouldShow: railsEnabled && edge !== mainPosition && !barHidden
+    // Zero-config MVP: no enabled flag — visible while the plugin runs and
+    // the main bar isn't hiding the frame (the bar toggle hides rails too).
+    readonly property bool shouldShow: edge !== mainPosition && !barHidden
     onShouldShowChanged: if (!shouldShow) activeSection = ""
 
     // 3.5 — trapped span of this rail along its axis (between main and the

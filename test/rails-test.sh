@@ -123,11 +123,16 @@ if (typeof normalizeFn === 'function') {
   }
   if (!bar) { console.log('ok - BarModel not found, skip normalize checks'); } else {
   let cfg = normalizeFn(undefined, 'top')
-  assertEqual(cfg.enabled, false, 'normalize undefined -> disabled')
-  cfg = normalizeFn({ enabled: true, top: { left: [{ id: 'omarchy.tray' }] } }, 'top')
+  assertEqual(cfg.rails.top.left.length, 0, 'normalize undefined -> zero-config empty rails')
+  assertEqual(cfg.trigger, 'hover', 'normalize undefined -> default trigger hover')
+  assert(cfg.enabled === undefined, 'no enabled flag in output')
+  // legacy explicit enabled:false is ignored entirely
+  cfg = normalizeFn({ enabled: false, bottom: { left: [{ id: 'x' }] } }, 'top')
+  assertEqual(cfg.rails.bottom.left[0].id, 'x', 'legacy enabled:false ignored')
+  cfg = normalizeFn({ top: { left: [{ id: 'omarchy.tray' }] } }, 'top')
   assertEqual(cfg.rails.top.left[0].id, 'omarchy.tray', 'bar.rails direct top.left')
   // inline pinned preserved
-  cfg = normalizeFn({ enabled: true, bottom: { right: [{ id: 'omarchy.audio', pinned: true }] } }, 'top')
+  cfg = normalizeFn({ bottom: { right: [{ id: 'omarchy.audio', pinned: true }] } }, 'top')
   let entry = cfg.rails.bottom.right[0]
   assertEqual(entry.id, 'omarchy.audio', 'rails preserves id')
   assertEqual(entry.pinned, true, 'rails preserves pinned:true')

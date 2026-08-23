@@ -85,7 +85,6 @@ function normalizeRailLayout(raw) {
 function normalizeRailsConfig(raw, mainPosition) {
   var position = normalizePosition(mainPosition)
   var cfg = isPlainObject(raw) ? raw : {}
-  var enabled = cfg.enabled === true
   var trigger = normalizeTrigger(cfg.trigger)
   // Support both new shape (bar.rails = {enabled, trigger, top:{},...}) and compat old shape (bar.rails.rails or bar.frame)
   var railsRaw = null
@@ -135,7 +134,10 @@ function normalizeRailsConfig(raw, mainPosition) {
       }
     }
   }
-  return { enabled: enabled, trigger: trigger, rails: rails }
+  // Zero-config MVP: no `enabled` flag — rails exist while the plugin does.
+  // Visibility is gated by the plugin lifecycle itself and barHidden (the
+  // main-bar toggle hides both).
+  return { trigger: trigger, rails: rails }
 }
 
 function hasAnyWidgets(railLayout) {
@@ -166,15 +168,6 @@ function hasPinnedWidgets(railLayout) {
     for (var i = 0; i < arr.length; i++) if (isPinned(arr[i])) return true
   }
   return false
-}
-
-function frameVisible(frameConfig, edge, mainPosition) {
-  if (!isPlainObject(frameConfig) || frameConfig.enabled !== true) return false
-  return normalizePosition(edge) !== normalizePosition(mainPosition)
-}
-
-function railsVisible(config, edge, mainPosition) {
-  return frameVisible(config, edge, mainPosition)
 }
 
 // Compat alias for old frame naming
@@ -406,8 +399,6 @@ if (typeof module !== "undefined") {
     sectionHasWidgets: sectionHasWidgets,
     hasPinnedWidgets: hasPinnedWidgets,
     railLayoutFor: railLayoutFor,
-    frameVisible: frameVisible,
-    railsVisible: railsVisible,
     moveRailEntry: moveRailEntry,
     moveRailEntryAt: moveRailEntryAt,
     moveBarEntryToRail: moveBarEntryToRail,
