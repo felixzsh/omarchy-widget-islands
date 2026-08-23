@@ -63,10 +63,13 @@ PanelWindow {
     Component.onDestruction: if (dragHost && dragHost.unregisterIsland) dragHost.unregisterIsland(root)
 
     // Tunables. totalDepth INCLUDES the strip overlap: rail third + protrusion
-    // == 70% of main bar thickness.
-    readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.7))
+    // == 85% of main bar thickness.
+    readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.85))
     readonly property int depthOut: totalDepth - thickness
-    readonly property int pad: Style.space(3)
+    // Small end-padding so populated tabs hug their widgets: at append-to-end
+    // drops the indicator sits flush with the tab edge instead of leaving an
+    // empty trailing strip. Empty islands stay totalDepth-sized either way.
+    readonly property int pad: Style.space(1)
 
     // 3.6 — window origin in screen coords (full-edge span, flush corners).
     // NOTE: the window's own width/height are NOT screen-sized on every edge
@@ -180,7 +183,7 @@ PanelWindow {
     Row {
         id: contentRow
         visible: root.horizontal
-        spacing: Style.space(2)
+        spacing: 0
         anchors.centerIn: tab
 
         Repeater {
@@ -202,7 +205,7 @@ PanelWindow {
     Column {
         id: contentColumn
         visible: !root.horizontal
-        spacing: Style.space(2)
+        spacing: 0
         anchors.centerIn: tab
 
         Repeater {

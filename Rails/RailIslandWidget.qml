@@ -92,14 +92,14 @@ Item {
         readonly property bool horizontalRail: slot.edge === "top" || slot.edge === "bottom"
 
         visible: opacity > 0
-        opacity: slot.panelOpen ? 1.0 : 0
+        opacity: slot.panelOpen && !slot.isDragSource ? 0.9 : 0
         color: Color.accent
         radius: Math.min(width, height) / 2
         width: horizontalRail
             ? Math.max(Style.space(10), Math.round(parent.width * 0.55))
-            : 3
+            : Style.space(2)
         height: horizontalRail
-            ? 3
+            ? Style.space(2)
             : Math.max(Style.space(10), Math.round(parent.height * 0.55))
         x: !horizontalRail
             ? (slot.edge === "left" ? parent.width - width - inset : inset)

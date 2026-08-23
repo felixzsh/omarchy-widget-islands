@@ -86,7 +86,7 @@ PanelWindow {
     function pointerInRailZone(pEdge, px, py) {
         var sw = screen ? screen.width : 0
         var sh = screen ? screen.height : 0
-        var depth = Math.max(thickness + 2, Math.round(barSize * 0.7)) + zoneGrace
+        var depth = Math.max(thickness + 2, Math.round(barSize * 0.85)) + zoneGrace
         var start = spanStart - zoneGrace
         var end = spanStart + spanLen + zoneGrace
         if (pEdge === "top") return py <= depth && px >= start && px <= end
