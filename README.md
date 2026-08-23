@@ -14,7 +14,7 @@ Quickshell **bar → bar with rails** — a single always-visible main bar wrapp
 ## Installation
 
 ```bash
-omarchy plugin add https://github.com/felixzsh/omarchy-frame --enable --yes
+omarchy plugin add https://github.com/felixzsh/omarchy-rails --enable --yes
 ```
 
 ## Configuration — `~/.config/omarchy/shell.json`
