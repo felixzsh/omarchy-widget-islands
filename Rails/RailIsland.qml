@@ -42,6 +42,14 @@ PanelWindow {
     required property var dragHost
     property bool clickMode: false
 
+    // Parked-window mode: the layer surface stays MAPPED for the rail's life;
+    // revealing flips content + input mask (~one commit) instead of creating
+    // surfaces. Mapping storms at bar-drag start stalled the native bar's own
+    // ghost — same reason Bar.qml parks instead of unmapping (~150ms vs ~20ms).
+    readonly property bool revealed: dragHost !== null
+        && (dragHost.dragModeActive
+            || (dragHost.activeSection === section && entries.length > 0))
+
     readonly property bool pointerInside: islandHover.hovered
     // While any hosted widget has its panel open, the island is pinned:
     // hover-leave must not dismiss it (the widget lives here — closing the
@@ -158,11 +166,11 @@ PanelWindow {
         height: root.horizontal ? root.totalDepth : root.length
 
         color: root.backgroundColor
+        visible: root.revealed
     }
 
-    // Input restricted to the tab: clicks elsewhere fall through (to the
-    // rails below, the desktop, or the click-catcher while armed).
-    mask: Region { item: tab }
+    // Input restricted to the tab while revealed; parked = fully click-through.
+    mask: Region { item: root.revealed ? tab : null }
 
     // Duck-contract shim handed to hosted widgets: mirrors innerBar except
     // position/vertical, which reflect THIS rail's edge.
@@ -182,7 +190,7 @@ PanelWindow {
 
     Row {
         id: contentRow
-        visible: root.horizontal
+        visible: root.horizontal && root.revealed
         spacing: 0
         anchors.centerIn: tab
 
@@ -204,7 +212,7 @@ PanelWindow {
 
     Column {
         id: contentColumn
-        visible: !root.horizontal
+        visible: !root.horizontal && root.revealed
         spacing: 0
         anchors.centerIn: tab
 
@@ -227,7 +235,7 @@ PanelWindow {
     Rectangle {
         readonly property var r: dragHost ? dragHost.localDropGeometry(root) : null
 
-        visible: r !== null
+        visible: r !== null && root.revealed
         x: r ? Math.round(r.x) : 0
         y: r ? Math.round(r.y) : 0
         width: r ? r.width : 0
@@ -279,7 +287,7 @@ PanelWindow {
     }
     IslandCatcher {
         catcherScreen: root.screen
-        visible: root.visible && root.clickMode && root.catcherArmed
+        visible: root.revealed && root.clickMode && root.catcherArmed
             && !(root.dragHost && root.dragHost.dragModeActive)
     }
 

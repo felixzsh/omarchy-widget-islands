@@ -589,9 +589,9 @@ PanelWindow {
                 fontFamily: railWindow.fontFamily
                 clickMode: railWindow.trigger === "click"
                 dragHost: railWindow
+                // Parked windows: mapped whenever the rail exists; reveal
+                // logic lives inside the island (revealed property).
                 visible: railWindow.shouldShow && !remapGuard.remapping
-                    && (railWindow.dragModeActive
-                        || (railWindow.activeSection === modelData && entries.length > 0))
                 onCloseRequested: if (!railWindow.railDragActive) railWindow.activeSection = ""
                 onPointerInsideChanged: {
                     if (pointerInside) hoverCloseTimer.stop()
@@ -615,16 +615,18 @@ PanelWindow {
     component RailDragGhostPanel: PanelWindow {
         id: ghostWindow
 
-        readonly property bool active: railWindow.dragModeActive
+        readonly property bool active: railWindow.railDragActive
         readonly property var sourceItem: railWindow.railDragSourceSlot
             ? railWindow.railDragSourceSlot.activeItem : null
         readonly property int ghostPadding: Style.space(1)
         readonly property int ghostWidth: sourceItem ? Math.max(1, Math.ceil(sourceItem.width)) : 1
         readonly property int ghostHeight: sourceItem ? Math.max(1, Math.ceil(sourceItem.height)) : 1
 
-        // Maps during BOTH drag kinds: rail drags show the ghost item + line,
-        // bar drags only our island insertion lines (the bar paints its own).
-        visible: active
+        // Rail-initiated drags ONLY: the bar paints its own ghost natively,
+        // and insertion lines now live inside the island windows. Keeping this
+        // unmapped during bar drags removes 4 pointless fullscreen mappings
+        // from every bar-drag start.
+        visible: active && sourceItem !== null
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "omarchy-rails-drag-ghost-" + railWindow.edge
@@ -642,8 +644,7 @@ PanelWindow {
         mask: Region {}
 
         Item {
-            // Rail-initiated drags only: the bar paints its own ghost natively.
-            visible: railWindow.railDragActive && railWindow.railDragImageUrl !== ""
+            visible: railWindow.railDragImageUrl !== ""
             x: Math.round(railWindow.railDragScreenX - railWindow.railDragOffsetX - ghostWindow.ghostPadding)
             y: Math.round(railWindow.railDragScreenY - railWindow.railDragOffsetY - ghostWindow.ghostPadding)
             width: ghostWindow.ghostWidth + ghostWindow.ghostPadding * 2
