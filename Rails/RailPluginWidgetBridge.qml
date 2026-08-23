@@ -91,6 +91,31 @@ Item {
         owned = nextOwned
 
         for (var i = 0; i < wanted.length; i++) loadIfNeeded(wanted[i], reg, plugins)
+
+        // Services (dynamic data: live counters, trackers, daemons-with-state).
+        // The host only starts a plugin's service while isEnabled() says so,
+        // and its placement scan doesn't know about rails — rail-hosted
+        // widgets would render but feed on a service that never exists.
+        // ensureService() is public and ungated; idempotent, so calling it
+        // every sync (signals + 4s timer) keeps the service alive across the
+        // core's sweeps. These services persist state to disk by design, so
+        // even a destroy/recreate cycle loses nothing.
+        //
+        // UPSTREAM-PR(omarchy-core): teach PluginRegistry.findEntryLocation
+        // about config.bar.rails[edge][section] (mirror findBarLocation with
+        // barEntryId) and add the same pass to shell.updateEntryInline before
+        // its plugins[] fallback — then this loop becomes redundant.
+        for (var w = 0; w < wanted.length; w++) ensureServiceIfNeeded(wanted[w], plugins)
+    }
+
+    function ensureServiceIfNeeded(id, plugins) {
+        if (!shell || typeof shell.ensureService !== "function") return
+        var manifest = plugins[id]
+        if (!manifest || !manifest.kinds || manifest.kinds.indexOf("service") === -1) return
+        var had = !!shell.serviceFor(id)
+        shell.ensureService(id)
+        if (!had && shell.serviceFor(id))
+            console.warn("[RAIL] plugin-service bridge started:", id)
     }
 
     function loadIfNeeded(id, reg, plugins) {
