@@ -168,6 +168,28 @@ PanelWindow {
         // Outside this rail's zone nothing is a target: releasing there
         // cancels the move, same as releasing off the native bar.
         if (drop && !pointerInRailZone(edge, railDragScreenX, railDragScreenY)) drop = null
+
+        // DEBUG: log only on target transitions (low frequency) + candidate
+        // geometry snapshot, so a journal excerpt shows exactly why the line
+        // hopped where it hopped.
+        if ((drop ? drop.slot : null) !== railDragTargetSlot
+            || (drop ? drop.after : false) !== railDragAfter) {
+            var dbgParts = []
+            for (var d = 0; d < candidates.length; d++) {
+                var cd = candidates[d]
+                var nm = cd.slot.isPlaceholder ? ("PH@" + cd.slot.section)
+                    : (cd.slot.moduleName + "@" + cd.slot.section)
+                dbgParts.push(nm + ":" + Math.round(cd.x) + "," + Math.round(cd.y)
+                    + " " + Math.round(cd.width) + "x" + Math.round(cd.height))
+            }
+            console.warn("[RAIL] drag-target:",
+                drop ? ((drop.slot.isPlaceholder ? "PH@" + drop.slot.section : drop.slot.moduleName + "@" + drop.slot.section)
+                    + " after=" + drop.after) : "null",
+                "· cursor=" + Math.round(railDragScreenX) + "," + Math.round(railDragScreenY),
+                "· axis=" + (!isHorizontal ? "y" : "x"))
+            console.warn("[RAIL] candidates:", dbgParts.join(" | "))
+        }
+
         railDragTargetSlot = drop ? drop.slot : null
         railDragAfter = drop ? drop.after : false
         railDragTargetGeometry = drop ? railDropMarkerRect(drop.slot, drop.after) : null
@@ -198,7 +220,12 @@ PanelWindow {
         var tgt = railDragTargetSlot
         var after = railDragAfter
         clearRailDrag()
-        if (!src || !tgt || !canMutateRail) return
+        if (!src || !tgt || !canMutateRail) {
+            console.warn("[RAIL] drop: CANCEL",
+                "src=", src ? (src.moduleName + "@" + src.section) : "null",
+                "tgt=", tgt ? (tgt.isPlaceholder ? "PH@" + tgt.section : tgt.moduleName + "@" + tgt.section) : "null")
+            return
+        }
 
         // beforeName: the entry the moved widget lands BEFORE. Dropping "after"
         // the target means before its next sibling ("append" when none).
@@ -214,8 +241,14 @@ PanelWindow {
             }
         }
 
+        console.warn("[RAIL] drop:", edge,
+            src.moduleName + "@" + src.section,
+            "->", (tgt.isPlaceholder ? "PH@" + tgt.section : tgt.moduleName + "@" + tgt.section),
+            "after=" + after, "before='" + beforeName + "'")
+
         barApi.shell.mutateShellConfig(function(config) {
-            RailModel.moveRailEntry(config, edge, src.section, src.moduleName, tgt.section, beforeName)
+            var changed = RailModel.moveRailEntry(config, edge, src.section, src.moduleName, tgt.section, beforeName)
+            console.warn("[RAIL] drop result:", changed ? "MOVED" : "IDENTITY (no write)")
         })
     }
 
