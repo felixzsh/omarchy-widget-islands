@@ -347,18 +347,39 @@ function moveRailEntryBetweenEdges(config, fromEdge, fromSection, fromIndex, toE
   return true
 }
 
+// 3.7 universal — ensure & return config.bar.layout[region].
+function barLayoutSection(config, region) {
+  if (!isPlainObject(config.bar)) config.bar = {}
+  if (!isPlainObject(config.bar.layout)) config.bar.layout = {}
+  if (!Array.isArray(config.bar.layout[region])) config.bar.layout[region] = []
+  return config.bar.layout[region]
+}
+
+// Index of the occurrence-th entry whose id == name within a bar region
+// layout (-1 when absent). Bar moduleSlots can't be trusted for positional
+// math — registration order diverges from layout after any live mutation —
+// so cross-surface drops resolve destinations by NAME + geometric occurrence
+// ordinal instead, like upstream's name-based drops but duplicate-aware.
+function barEntryIndexOfOccurrence(entries, name, occurrence) {
+  var arr = Array.isArray(entries) ? entries : []
+  var seen = 0
+  for (var i = 0; i < arr.length; i++) {
+    if (entryId(arr[i]) === name) {
+      if (seen === occurrence) return i
+      seen++
+    }
+  }
+  return -1
+}
+
 // 3.7 universal — rail → native bar. Source index-addressed within its section
 // (duplicate ids safe); destination is a bar layout region with an insert-
-// before index derived from visible slot order (-1 / overflow = append).
+// before index resolved by the caller (-1 / overflow = append).
 function moveRailEntryToBarAt(config, fromEdge, fromSection, fromIndex, toRegion, toIndex) {
   var fromEntries = rawRailSection(config, fromEdge, fromSection)
   if (!Array.isArray(fromEntries) || fromIndex < 0 || fromIndex >= fromEntries.length) return false
 
-  if (!isPlainObject(config.bar)) config.bar = {}
-  if (!isPlainObject(config.bar.layout)) config.bar.layout = {}
-  if (!Array.isArray(config.bar.layout[toRegion])) config.bar.layout[toRegion] = []
-
-  var toEntries = config.bar.layout[toRegion]
+  var toEntries = barLayoutSection(config, toRegion)
   var destIndex = toIndex < 0 || toIndex > toEntries.length ? toEntries.length : toIndex
 
   var movedEntry = fromEntries[fromIndex]
@@ -392,6 +413,8 @@ if (typeof module !== "undefined") {
     moveBarEntryToRail: moveBarEntryToRail,
     moveRailEntryBetweenEdges: moveRailEntryBetweenEdges,
     moveRailEntryToBarAt: moveRailEntryToBarAt,
+    barLayoutSection: barLayoutSection,
+    barEntryIndexOfOccurrence: barEntryIndexOfOccurrence,
     railReferencedIds: railReferencedIds
   }
 }

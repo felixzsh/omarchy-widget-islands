@@ -256,6 +256,24 @@ if (typeof normalizeFn === 'function') {
     // bad fromIndex
     assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 5, 'left', 0), false, 'bad rail index false')
   }
+  if (rm.barEntryIndexOfOccurrence) {
+    const arr = [{id:'a'},'b',{id:'a'},{id:'c'}]
+    assertEqual(rm.barEntryIndexOfOccurrence(arr,'a',0),0,'occurrence 0 of a')
+    assertEqual(rm.barEntryIndexOfOccurrence(arr,'a',1),2,'occurrence 1 of a')
+    assertEqual(rm.barEntryIndexOfOccurrence(arr,'a',2),-1,'exceeded occurrence')
+    assertEqual(rm.barEntryIndexOfOccurrence(arr,'b',0),1,'string entry b')
+    assertEqual(rm.barEntryIndexOfOccurrence(arr,'zz',0),-1,'missing name')
+    // integrado: insertar después del SEGUNDO 'a' cae en su posición exacta
+    let c5 = { bar: { layout: { center: [{id:'a'},'b',{id:'a'}] }, rails: {
+      bottom: { left: [{id:'r'}], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] },
+      left: { left: [], center: [], right: [] } } } }
+    const ent = rm.barLayoutSection(c5, 'center')
+    const idx = rm.barEntryIndexOfOccurrence(ent, 'a', 1)
+    rm.moveRailEntryToBarAt(c5, 'bottom', 'left', 0, 'center', idx + 1)
+    assertEqual(ent.map(e => typeof e === 'string' ? e : e.id).join(','), 'a,b,a,r', 'lands after second a')
+    assertEqual(c5.bar.rails.bottom.left.length, 0, 'rail emptied')
+  }
   if (rm.moveRailEntryAt) {
     // REGRESSION: duplicate ids made name-based drops land on the wrong one.
     // left=[cb,net,a,a], drag net(idx1) after first a(idx2) → [cb,a,net,a]

@@ -108,6 +108,10 @@ PanelWindow {
     property var railToBarTargetSlot: null
     property bool railToBarAfter: false
     property var railToBarGeometry: null
+    // Destination identity resolved geometrically (immune to moduleSlots
+    // registration order): which occurrence of this module the cursor meant.
+    property string railToBarTargetName: ""
+    property int railToBarTargetOrdinal: 0
 
     function barSurfaceWindow() {
         var b = barApi
@@ -147,6 +151,8 @@ PanelWindow {
         railToBarTargetSlot = null
         railToBarAfter = false
         railToBarGeometry = null
+        railToBarTargetName = ""
+        railToBarTargetOrdinal = 0
         var b = barApi
         if (!b || !pointInBarStrip(px, py)) return
 
@@ -169,6 +175,20 @@ PanelWindow {
         var c = null
         for (var j = 0; j < cands.length; j++) if (cands[j].slot === drop.slot) { c = cands[j]; break }
         if (!c) return
+
+        // Which occurrence of this module is under the cursor? Count same-id
+        // same-region candidates strictly BEFORE it along the drag axis.
+        railToBarTargetName = String(drop.slot.moduleName || "")
+        var ord = 0
+        for (var m = 0; m < cands.length; m++) {
+            var oc = cands[m]
+            if (!oc.slot || oc.slot === drop.slot) continue
+            if (oc.slot.region !== drop.slot.region || oc.slot.moduleName !== drop.slot.moduleName) continue
+            var before = b.vertical === true ? oc.y < c.y : oc.x < c.x
+            if (before) ord++
+        }
+        railToBarTargetOrdinal = ord
+
         var th = Style.spacing.xs
         railToBarGeometry = b.vertical === true
             ? { x: Math.round(c.x), y: Math.round(c.y + (drop.after ? c.height : 0) - th / 2),
@@ -360,6 +380,8 @@ PanelWindow {
         railToBarTargetSlot = null
         railToBarAfter = false
         railToBarGeometry = null
+        railToBarTargetName = ""
+        railToBarTargetOrdinal = 0
         if (moveHost && moveHost.universalDragEdge === edge) {
             moveHost.universalDragEdge = ""
             moveHost.universalDragX = 0
@@ -518,6 +540,8 @@ PanelWindow {
         var peerAfter = peer ? peer.barDropAfter : false
         var barTgt = railToBarTargetSlot
         var barAfter = railToBarAfter
+        var barName = railToBarTargetName
+        var barOrd = railToBarTargetOrdinal
 
         clearRailDrag()   // also resets hub cursor/edge + railToBar*
         if (peer && peer.clearBarDrop) peer.clearBarDrop()
@@ -553,19 +577,21 @@ PanelWindow {
 
         if (barTgt) {
             var region = String(barTgt.region || "")
-            if (!region) return
-            var base = 0
-            var slots = typeof barApi.moduleSlots !== "undefined" ? barApi.moduleSlots : []
-            for (var k = 0; k < slots.length; k++) {
-                var bs = slots[k]
-                if (bs === barTgt) break
-                if (bs && bs.region === region && bs.visible) base++
-            }
-            var destIdx = barAfter ? base + 1 : base
+            var tName = barName
+            var tOrd = barOrd
             console.warn("[RAIL] rail->bar drop:", edge,
                 src.moduleName + "@" + src.section + "[" + srcIdx + "]",
-                "-> bar." + region + "@" + destIdx, "after=" + barAfter)
+                "-> bar." + region, tName + "#" + tOrd, "after=" + barAfter)
             barApi.shell.mutateShellConfig(function(config) {
+                // Resolve against the REAL layout array inside the mutation:
+                // moduleSlots order diverges from layout after live changes,
+                // so position by name + occurrence ordinal (upstream parity).
+                var entries = RailModel.barLayoutSection(config, region)
+                var idx = RailModel.barEntryIndexOfOccurrence(entries, tName, tOrd)
+                console.warn("[RAIL][DBG] resolve:", region,
+                    "entries=", entries.map(function(e) { return RailModel.entryId(e) }).join("|"),
+                    "name=", tName, "ord=", tOrd, "-> idx=", idx)
+                var destIdx = idx < 0 ? entries.length : idx + (barAfter ? 1 : 0)
                 var changed = RailModel.moveRailEntryToBarAt(
                     config, edge, src.section, srcIdx, region, destIdx)
                 console.warn("[RAIL] rail->bar result:", changed ? "MOVED" : "NOT MOVED")
