@@ -227,29 +227,31 @@ PanelWindow {
             return
         }
 
-        // beforeName: the entry the moved widget lands BEFORE. Dropping "after"
-        // the target means before its next sibling ("append" when none).
-        var beforeName = tgt.moduleName
-        if (after) {
-            beforeName = ""
-            var arr = railLayout[tgt.section] || []
-            for (var i = 0; i < arr.length; i++) {
-                if (RailModel.entryId(arr[i]) === tgt.moduleName && i + 1 < arr.length) {
-                    beforeName = RailModel.entryId(arr[i + 1])
-                    break
-                }
-            }
-        }
+        // Index-addressed move: slot order in moduleSlots mirrors the section
+        // layout, so resolve positions by identity — duplicate ids (two
+        // omarchy.audio entries, say) can't hijack name lookups anymore.
+        var srcIdx = slotIndexIn(src.host ? src.host.moduleSlots : [], src)
+        var tgtIdx = tgt.isPlaceholder ? -1 : slotIndexIn(tgt.host ? tgt.host.moduleSlots : [], tgt)
+        if (srcIdx < 0) return
 
         console.warn("[RAIL] drop:", edge,
-            src.moduleName + "@" + src.section,
-            "->", (tgt.isPlaceholder ? "PH@" + tgt.section : tgt.moduleName + "@" + tgt.section),
-            "after=" + after, "before='" + beforeName + "'")
+            src.moduleName + "@" + src.section + "[" + srcIdx + "]",
+            "->", (tgt.isPlaceholder ? "append@" + tgt.section
+                : tgt.moduleName + "@" + tgt.section + "[" + tgtIdx + "]"),
+            "after=" + after)
 
         barApi.shell.mutateShellConfig(function(config) {
-            var changed = RailModel.moveRailEntry(config, edge, src.section, src.moduleName, tgt.section, beforeName)
+            var changed = RailModel.moveRailEntryAt(
+                config, edge, src.section, srcIdx, tgt.section, tgtIdx, after)
             console.warn("[RAIL] drop result:", changed ? "MOVED" : "IDENTITY (no write)")
         })
+    }
+
+    function slotIndexIn(slots, target) {
+        for (var i = 0; i < slots.length; i++) {
+            if (slots[i] === target) return i
+        }
+        return -1
     }
 
     visible: shouldShow && !remapGuard.remapping

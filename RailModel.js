@@ -226,6 +226,42 @@ function moveRailEntry(config, edge, fromSection, name, toSection, beforeName) {
   return true
 }
 
+// Index-addressed variant: immune to duplicate entry ids (two entries sharing
+// a name made name-resolution land on the wrong one → phantom identity/no-op
+// drops). targetIndex refers to the entry's position BEFORE removal;
+// after=true means "insert past it". targetIndex < 0 = append.
+function moveRailEntryAt(config, edge, fromSection, fromIndex, toSection, targetIndex, after) {
+  var fromEntries = rawRailSection(config, edge, fromSection)
+  var toEntries = rawRailSection(config, edge, toSection)
+  if (!Array.isArray(fromEntries) || fromIndex < 0 || fromIndex >= fromEntries.length) return false
+
+  var toIndex
+  if (!Array.isArray(toEntries) || toEntries.length === 0 || targetIndex < 0
+      || targetIndex >= toEntries.length) {
+    toIndex = Array.isArray(toEntries) ? toEntries.length : 0
+  } else if (fromSection === toSection && targetIndex === fromIndex) {
+    return false
+  } else {
+    toIndex = after ? targetIndex + 1 : targetIndex
+  }
+
+  if (fromSection === toSection && fromIndex === toIndex) return false
+
+  var movedEntry = fromEntries[fromIndex]
+  fromEntries.splice(fromIndex, 1)
+
+  if (fromSection === toSection && fromIndex < toIndex) toIndex -= 1
+  if (toIndex < 0) toIndex = 0
+  if (toIndex > toEntries.length) toIndex = toEntries.length
+  if (fromSection === toSection && fromIndex === toIndex) {
+    fromEntries.splice(fromIndex, 0, movedEntry)
+    return false
+  }
+
+  toEntries.splice(toIndex, 0, movedEntry)
+  return true
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isPlainObject: isPlainObject,
@@ -246,6 +282,7 @@ if (typeof module !== "undefined") {
     railLayoutFor: railLayoutFor,
     frameVisible: frameVisible,
     railsVisible: railsVisible,
-    moveRailEntry: moveRailEntry
+    moveRailEntry: moveRailEntry,
+    moveRailEntryAt: moveRailEntryAt
   }
 }

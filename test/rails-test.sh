@@ -181,6 +181,37 @@ if (typeof normalizeFn === 'function') {
     c = freshConfig()
     assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'zz', 'center', ''), false, 'missing id returns false')
   }
+  if (rm.moveRailEntryAt) {
+    // REGRESSION: duplicate ids made name-based drops land on the wrong one.
+    // left=[cb,net,a,a], drag net(idx1) after first a(idx2) → [cb,a,net,a]
+    c = { bar: { rails: { top: {
+      left: [{id:'cb'}, {id:'net'}, {id:'a'}, {id:'a'}],
+      center: [], right: []
+    } } } }
+    assertEqual(rm.moveRailEntryAt(c, 'top', 'left', 1, 'left', 2, true), true,
+      'moveRailEntryAt net after first duplicate audio')
+    ids = c.bar.rails.top.left.map(e => e.id).join(',')
+    assertEqual(ids, 'cb,a,net,a', 'duplicate-id one-step move lands between the two')
+    // before variant: drag a(idx3) before net(idx1) → [cb,a,net,a] identity? no:
+    c = { bar: { rails: { top: {
+      left: [{id:'x'}, {id:'m'}, {id:'n'}], center: [], right: []
+    } } } }
+    assertEqual(rm.moveRailEntryAt(c, 'top', 'left', 2, 'left', 0, false), true, 'before idx0')
+    assertEqual(c.bar.rails.top.left.map(e => e.id).join(','), 'n,x,m', 'insert at head shifts')
+    // onto itself → identity
+    c = freshConfig()
+    assertEqual(rm.moveRailEntryAt(c, 'bottom', 'left', 0, 'left', 0, true), false, 'self target identity')
+    assertEqual(c.bar.rails.bottom.left.length, 3, 'identity keeps entries')
+    // append to empty section via placeholder (targetIndex -1)
+    c = { bar: { rails: { bottom: {
+      left: [{id:'a'}], center: [], right: []
+    } } } }
+    assertEqual(rm.moveRailEntryAt(c, 'bottom', 'left', 0, 'right', -1, false), true, 'placeholder append to empty right')
+    assertEqual(c.bar.rails.bottom.right[0].id, 'a', 'empty section gains entry')
+    // out-of-range source index
+    c = freshConfig()
+    assertEqual(rm.moveRailEntryAt(c, 'bottom', 'left', 9, 'center', 0, false), false, 'bad fromIndex rejected')
+  }
   }
 }
 
