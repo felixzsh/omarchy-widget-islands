@@ -10,6 +10,10 @@ A frame of **rails** around your Omarchy workspace. Your main bar stays exactly 
 2. **Install widgets/plugins normally** — everything lands in the main bar, exactly like without rails.
 3. **Drag anything from the bar into a rail** — while dragging, every rail reveals its drop zones; release and the widget lives there.
 
+```bash
+omarchy plugin add https://github.com/felixzsh/omarchy-rails --enable
+```
+
 From then on, reorder inside a rail, move widgets between rails, drag them back to the main bar — all with live insertion indicators, like the native bar's own editing experience.
 
 ## Features
