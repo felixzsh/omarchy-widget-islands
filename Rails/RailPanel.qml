@@ -169,6 +169,20 @@ PanelWindow {
         // cancels the move, same as releasing off the native bar.
         if (drop && !pointerInRailZone(edge, railDragScreenX, railDragScreenY)) drop = null
 
+        // Canonicalize interior seams: "after slot N" commits identically to
+        // "before slot N+1", but as two rival representations they tie at the
+        // seam and the line flip-flops between them. Pin it to the "before"
+        // side whenever a visible next sibling exists — real appends (last
+        // slot), placeholders and cross-section seams stay as-is.
+        if (drop && drop.after && !drop.slot.isPlaceholder) {
+            var cIsl = drop.slot.host
+            var cIdx = slotIndexIn(cIsl ? cIsl.moduleSlots : [], drop.slot)
+            if (cIdx >= 0 && cIdx + 1 < cIsl.moduleSlots.length) {
+                var nxt = cIsl.moduleSlots[cIdx + 1]
+                if (nxt && nxt.visible) drop = { slot: nxt, after: false }
+            }
+        }
+
         // DEBUG: log only on target transitions (low frequency) + candidate
         // geometry snapshot, so a journal excerpt shows exactly why the line
         // hopped where it hopped.
