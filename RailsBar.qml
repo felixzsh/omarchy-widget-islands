@@ -47,6 +47,19 @@ Item {
     })
     property int barConfigSerial: 0
 
+    // 3.7 — keep plugin bar-widgets registered while they live in rails (the
+    // core's isEnabled() only scans bar.layout/plugins/bar.id, so a rail
+    // placement alone reads as "disabled" and the core sweep drops them).
+    // Self-triggered: onRailsConfigChanged / onCfgSerialChanged / Timer /
+    // pluginRegistry signals inside the bridge — NO root handlers here (a
+    // second Component.onCompleted at this level kills the whole component).
+    RailPluginWidgetBridge {
+        id: pluginBridge
+        shell: innerBar && innerBar.shell ? innerBar.shell : null
+        railsConfig: root.normalizedRails
+        cfgSerial: root.barConfigSerial
+    }
+
     property bool containerMoveActive: false
     property string containerMoveSource: ""
     property string containerMoveCandidate: ""

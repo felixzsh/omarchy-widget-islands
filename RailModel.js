@@ -289,6 +289,30 @@ function moveBarEntryToRail(config, name, fromRegion, edge, toSection, targetInd
   return true
 }
 
+// 3.7 — ids referenced anywhere across a normalized rails config. The shell
+// core keeps a plugin's bar-widget registered only while its id sits in
+// bar.layout / plugins / bar.id; rail placements are invisible to
+// PluginRegistry.isEnabled(). This helper feeds our registration bridge.
+function railReferencedIds(rails) {
+  var out = []
+  if (!isPlainObject(rails)) return out
+  var edges = ["top", "bottom", "left", "right"]
+  var sections = ["left", "center", "right"]
+  for (var e = 0; e < edges.length; e++) {
+    var layout = isPlainObject(rails[edges[e]]) ? rails[edges[e]] : null
+    if (!layout) continue
+    for (var s = 0; s < sections.length; s++) {
+      var arr = layout[sections[s]]
+      if (!Array.isArray(arr)) continue
+      for (var i = 0; i < arr.length; i++) {
+        var id = entryId(arr[i])
+        if (id && out.indexOf(id) === -1) out.push(id)
+      }
+    }
+  }
+  return out
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isPlainObject: isPlainObject,
@@ -311,6 +335,7 @@ if (typeof module !== "undefined") {
     railsVisible: railsVisible,
     moveRailEntry: moveRailEntry,
     moveRailEntryAt: moveRailEntryAt,
-    moveBarEntryToRail: moveBarEntryToRail
+    moveBarEntryToRail: moveBarEntryToRail,
+    railReferencedIds: railReferencedIds
   }
 }

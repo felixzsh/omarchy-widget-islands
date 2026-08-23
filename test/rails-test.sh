@@ -203,6 +203,17 @@ if (typeof normalizeFn === 'function') {
     // missing id
     assertEqual(rm.moveBarEntryToRail({bar:{layout:{left:[]},rails:{}}}, 'nope', 'left', 'top', 'left', -1, false), false, 'bar->rail missing id false')
   }
+  if (rm.railReferencedIds) {
+    let r = { bottom: { left: [{id:'a'}], center: [{id:'b'},'c'], right: [] },
+              left:  { left: [], center: ['a'], right: [{id:'d'}] },
+              top: { left: [], center: [], right: [] },
+              right: { left: [], center: [], right: [] } }
+    let ids = rm.railReferencedIds(r)
+    assertEqual(ids.length, 4, 'railReferencedIds dedupes across edges')
+    for (const want of ['a','b','c','d']) assert(ids.indexOf(want) !== -1, 'contains ' + want)
+    assertEqual(rm.railReferencedIds({}).length, 0, 'empty rails -> empty ids')
+    assertEqual(rm.railReferencedIds(null).length, 0, 'null rails -> empty ids')
+  }
   if (rm.moveRailEntryAt) {
     // REGRESSION: duplicate ids made name-based drops land on the wrong one.
     // left=[cb,net,a,a], drag net(idx1) after first a(idx2) → [cb,a,net,a]
