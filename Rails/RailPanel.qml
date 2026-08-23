@@ -43,6 +43,11 @@ PanelWindow {
         return RailModel.sectionHasWidgets(railLayout, section)
     }
 
+    // 3.7 universal — register so the source panel can resolve peer claims
+    // at release and so RailsBar can coordinate drags across edges.
+    Component.onCompleted: if (moveHost && moveHost.registerRailPanel) moveHost.registerRailPanel(railWindow)
+    Component.onDestruction: if (moveHost && moveHost.unregisterRailPanel) moveHost.unregisterRailPanel(railWindow)
+
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
     readonly property string opposite: {
@@ -83,7 +88,11 @@ PanelWindow {
     // offer drop targets. The bar's own intra-bar behavior is untouched; we
     // only observe public state (barDragSource/barDragScreenX/Y).
     readonly property bool barDragging: barApi !== null && barApi.barDragSource !== null
-    readonly property bool dragModeActive: railDragActive || barDragging
+    // 3.7 universal — another rail's widget is being dragged: reveal OUR
+    // islands too and offer drop targets when the cursor enters our zone.
+    readonly property bool foreignRailDrag: moveHost !== null
+        && moveHost.universalDragEdge !== "" && moveHost.universalDragEdge !== edge
+    readonly property bool dragModeActive: railDragActive || barDragging || foreignRailDrag
 
     // Source identity captured CONTINUOUSLY while the bar drags — the bar
     // clears barDragSource before deciding its own drop, so reading it at
@@ -92,6 +101,70 @@ PanelWindow {
     property var barDropTargetSlot: null
     property bool barDropAfter: false
     property var barDropGeometry: null
+
+    // 3.7 universal — OUR rail drag hovering the NATIVE BAR strip (source
+    // panel only). Line is drawn by our ghost overlay, deterministic above
+    // the bar's Top layer.
+    property var railToBarTargetSlot: null
+    property bool railToBarAfter: false
+    property var railToBarGeometry: null
+
+    function barOrigin() {
+        var b = barApi
+        var ox = 0
+        var oy = 0
+        if (b && screen) {
+            if (b.position === "bottom") oy = Math.max(0, screen.height - b.height)
+            else if (b.position === "right") ox = Math.max(0, screen.width - b.width)
+        }
+        return { x: ox, y: oy }
+    }
+
+    function pointInBarStrip(px, py) {
+        var b = barApi
+        if (!b || !screen) return false
+        var t = Math.max(b.barSize, 8)
+        var sw = screen.width
+        var sh = screen.height
+        if (b.position === "top") return py <= t
+        if (b.position === "bottom") return py >= sh - t
+        if (b.position === "left") return px <= t
+        return px >= sw - t
+    }
+
+    function updateRailToBarTarget(px, py) {
+        railToBarTargetSlot = null
+        railToBarAfter = false
+        railToBarGeometry = null
+        var b = barApi
+        if (!b || !pointInBarStrip(px, py)) return
+
+        var o = barOrigin()
+        var slots = typeof b.moduleSlots !== "undefined" ? b.moduleSlots : []
+        var cands = []
+        for (var i = 0; i < slots.length; i++) {
+            var s = slots[i]
+            if (!s || !s.visible || s.width <= 0 || s.height <= 0) continue
+            var sp = { x: 0, y: 0 }
+            try { sp = s.mapToItem(null, 0, 0) } catch (e) { continue }
+            cands.push({ slot: s, x: o.x + sp.x, y: o.y + sp.y, width: s.width, height: s.height })
+        }
+
+        var drop = BarModel.nearestDropTarget(cands, { x: px, y: py }, b.vertical === true)
+        if (!drop) return
+        railToBarTargetSlot = drop.slot
+        railToBarAfter = drop.after
+
+        var c = null
+        for (var j = 0; j < cands.length; j++) if (cands[j].slot === drop.slot) { c = cands[j]; break }
+        if (!c) return
+        var th = Style.spacing.xs
+        railToBarGeometry = b.vertical === true
+            ? { x: Math.round(c.x), y: Math.round(c.y + (drop.after ? c.height : 0) - th / 2),
+                width: Math.round(c.width), height: th }
+            : { x: Math.round(c.x + (drop.after ? c.width : 0) - th / 2), y: Math.round(c.y),
+                width: th, height: Math.round(c.height) }
+    }
 
     function clearBarDrop() {
         barCrossSource = null
@@ -105,18 +178,25 @@ PanelWindow {
         var src = barApi.barDragSource
         barCrossSource = { region: String(src.region || ""), moduleName: String(src.moduleName || "") }
 
-        var px = barApi.barDragScreenX
-        var py = barApi.barDragScreenY
+        updateIncomingOffers(px, py)
+    }
 
+    // 3.7 universal — a RAIL-initiated drag from another edge hovering near us.
+    function updateForeignTarget() {
+        if (!foreignRailDrag || !moveHost) return
+        updateIncomingOffers(moveHost.universalDragX, moveHost.universalDragY)
+    }
+
+    // Shared core for both incoming-drag flavors (bar-initiated and foreign
+    // rail): every visible island's slots (+ empty-tab placeholders) compete
+    // by proximity inside this rail's zone; the zone gate is the only
+    // containment. Between two tabs the line pins to the nearest island.
+    function updateIncomingOffers(px, py) {
         barDropTargetSlot = null
         barDropAfter = false
         barDropGeometry = null
         if (!pointerInRailZone(edge, px, py)) return
 
-        // Same selection mechanics as intra-rail: EVERY visible island's slots
-        // (+ empty-tab placeholders) compete by proximity; the zone gate above
-        // is the only containment. Between two tabs the line pins to the
-        // nearest island's edge — identical to a rail-initiated drag.
         var cands = []
         for (var i = 0; i < islands.length; i++) {
             var isl = islands[i]
@@ -194,6 +274,21 @@ PanelWindow {
         })
     }
 
+    // 3.7 universal — react to the cross-panel drag coordinator (RailsBar).
+    Connections {
+        target: railWindow.moveHost
+        function onUniversalDragXChanged() { if (railWindow.foreignRailDrag) railWindow.updateForeignTarget() }
+        function onUniversalDragYChanged() { if (railWindow.foreignRailDrag) railWindow.updateForeignTarget() }
+        function onUniversalDragEdgeChanged() {
+            if (railWindow.foreignRailDrag) {
+                // First cursor sample may already sit inside our zone.
+                railWindow.updateForeignTarget()
+            } else if (!railWindow.railDragActive && !railWindow.barDragging) {
+                railWindow.clearBarDrop()
+            }
+        }
+    }
+
     Connections {
         target: barApi
         function onBarDragSourceChanged() {
@@ -231,6 +326,14 @@ PanelWindow {
         railDragScreenY = 0
         railDragOffsetX = 0
         railDragOffsetY = 0
+        railToBarTargetSlot = null
+        railToBarAfter = false
+        railToBarGeometry = null
+        if (moveHost && moveHost.universalDragEdge === edge) {
+            moveHost.universalDragEdge = ""
+            moveHost.universalDragX = 0
+            moveHost.universalDragY = 0
+        }
     }
 
     function beginRailDrag(slot, pressedX, pressedY) {
@@ -249,6 +352,7 @@ PanelWindow {
         }
         console.warn("[RAIL]", edge, "widget-drag begin:", slot.moduleName)
         railDragSourceSlot = slot
+        if (moveHost) moveHost.universalDragEdge = edge
     }
 
     function updateRailDrag(slot, scenePoint) {
@@ -258,6 +362,11 @@ PanelWindow {
         var so = srcIsl ? srcIsl.screenOrigin() : { x: 0, y: 0 }
         railDragScreenX = so.x + scenePoint.x
         railDragScreenY = so.y + scenePoint.y
+        // Live cursor for peer panels computing their own island offers.
+        if (moveHost && moveHost.universalDragEdge === edge) {
+            moveHost.universalDragX = railDragScreenX
+            moveHost.universalDragY = railDragScreenY
+        }
 
         // Drop candidates: every visible slot across this rail's islands,
         // expressed in SCREEN coords (islands are separate windows but all
@@ -333,6 +442,10 @@ PanelWindow {
         railDragTargetSlot = drop ? drop.slot : null
         railDragAfter = drop ? drop.after : false
         railDragTargetGeometry = drop ? railDropMarkerRect(drop.slot, drop.after) : null
+
+        // 3.7 universal — outside our zone the native bar strip may offer a
+        // landing spot (rail -> bar). Cleared automatically on each update.
+        updateRailToBarTarget(railDragScreenX, railDragScreenY)
     }
 
     function railDropMarkerRect(targetSlot, after) {
@@ -357,22 +470,87 @@ PanelWindow {
 
     function finishRailDrag() {
         var src = railDragSourceSlot
-        var tgt = railDragTargetSlot
-        var after = railDragAfter
-        clearRailDrag()
-        if (!src || !tgt || !canMutateRail) {
+        var homeTgt = railDragTargetSlot
+        var homeAfter = railDragAfter
+
+        // 3.7 universal — cross-surface claims, mutually exclusive by geometry:
+        // a peer panel's island offer (rail -> other rail) or our own native-
+        // bar strip target (rail -> bar).
+        var peer = null
+        if (moveHost) {
+            for (var pi = 0; pi < moveHost.railPanels.length; pi++) {
+                var pp = moveHost.railPanels[pi]
+                if (pp !== railWindow && pp.barDropTargetSlot) { peer = pp; break }
+            }
+        }
+        var peerTgt = peer ? peer.barDropTargetSlot : null
+        var peerAfter = peer ? peer.barDropAfter : false
+        var barTgt = railToBarTargetSlot
+        var barAfter = railToBarAfter
+
+        clearRailDrag()   // also resets hub cursor/edge + railToBar*
+        if (peer && peer.clearBarDrop) peer.clearBarDrop()
+
+        if (!src || !canMutateRail) {
             console.warn("[RAIL] drop: CANCEL",
                 "src=", src ? (src.moduleName + "@" + src.section) : "null",
-                "tgt=", tgt ? (tgt.isPlaceholder ? "PH@" + tgt.section : tgt.moduleName + "@" + tgt.section) : "null")
+                "homeTgt=", homeTgt ? (homeTgt.isPlaceholder ? "PH@" + homeTgt.section : homeTgt.moduleName + "@" + homeTgt.section) : "null",
+                "peer=", peer ? peer.edge : "-", "bar=", barTgt ? "yes" : "-")
             return
         }
 
-        // Index-addressed move: slot order in moduleSlots mirrors the section
-        // layout, so resolve positions by identity — duplicate ids (two
-        // omarchy.audio entries, say) can't hijack name lookups anymore.
+        // Index-addressed moves: slot order in moduleSlots mirrors the section
+        // layout, so resolve positions by identity — duplicate ids can't
+        // hijack name lookups.
         var srcIdx = slotIndexIn(src.host ? src.host.moduleSlots : [], src)
-        var tgtIdx = tgt.isPlaceholder ? -1 : slotIndexIn(tgt.host ? tgt.host.moduleSlots : [], tgt)
         if (srcIdx < 0) return
+
+        if (peerTgt) {
+            var pIsl = peerTgt.host
+            var pIdx = peerTgt.isPlaceholder ? -1 : slotIndexIn(pIsl ? pIsl.moduleSlots : [], peerTgt)
+            console.warn("[RAIL] cross-rail drop:", edge,
+                src.moduleName + "@" + src.section + "[" + srcIdx + "]",
+                "->", peer.edge, (peerTgt.isPlaceholder ? "append@" + peerTgt.section
+                    : peerTgt.moduleName + "@" + peerTgt.section + "[" + pIdx + "]"),
+                "after=" + peerAfter)
+            barApi.shell.mutateShellConfig(function(config) {
+                var changed = RailModel.moveRailEntryBetweenEdges(
+                    config, edge, src.section, srcIdx, peer.edge, peerTgt.section, pIdx, peerAfter)
+                console.warn("[RAIL] cross-rail result:", changed ? "MOVED" : "IDENTITY (no write)")
+            })
+            return
+        }
+
+        if (barTgt) {
+            var region = String(barTgt.region || "")
+            if (!region) return
+            var base = 0
+            var slots = typeof barApi.moduleSlots !== "undefined" ? barApi.moduleSlots : []
+            for (var k = 0; k < slots.length; k++) {
+                var bs = slots[k]
+                if (bs === barTgt) break
+                if (bs && bs.region === region && bs.visible) base++
+            }
+            var destIdx = barAfter ? base + 1 : base
+            console.warn("[RAIL] rail->bar drop:", edge,
+                src.moduleName + "@" + src.section + "[" + srcIdx + "]",
+                "-> bar." + region + "@" + destIdx, "after=" + barAfter)
+            barApi.shell.mutateShellConfig(function(config) {
+                var changed = RailModel.moveRailEntryToBarAt(
+                    config, edge, src.section, srcIdx, region, destIdx)
+                console.warn("[RAIL] rail->bar result:", changed ? "MOVED" : "NOT MOVED")
+            })
+            return
+        }
+
+        if (!homeTgt) {
+            console.warn("[RAIL] drop: CANCEL (no targets)")
+            return
+        }
+
+        var tgt = homeTgt
+        var after = homeAfter
+        var tgtIdx = tgt.isPlaceholder ? -1 : slotIndexIn(tgt.host ? tgt.host.moduleSlots : [], tgt)
 
         console.warn("[RAIL] drop:", edge,
             src.moduleName + "@" + src.section + "[" + srcIdx + "]",
@@ -668,8 +846,21 @@ PanelWindow {
             }
         }
 
-        // NOTE: no insertion line here anymore — islands paint their own
-        // segment via localDropGeometry() (deterministic z-order).
+        // NOTE: island targets paint their own segment inside the island
+        // window (localDropGeometry). This window only draws the NATIVE BAR
+        // target line for rail->bar drags — Overlay deterministically sits
+        // above the bar's Top layer, and the strip never overlaps islands.
+        Rectangle {
+            readonly property var targetRect: railWindow.railToBarGeometry
+
+            visible: ghostWindow.active && targetRect !== null
+            x: targetRect ? Math.round(targetRect.x) : 0
+            y: targetRect ? Math.round(targetRect.y) : 0
+            width: targetRect ? targetRect.width : 0
+            height: targetRect ? targetRect.height : 0
+            color: Color.accent
+            radius: Math.min(width, height) / 2
+        }
     }
 
     RailDragGhostPanel {

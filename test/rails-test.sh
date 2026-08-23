@@ -214,6 +214,48 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.railReferencedIds({}).length, 0, 'empty rails -> empty ids')
     assertEqual(rm.railReferencedIds(null).length, 0, 'null rails -> empty ids')
   }
+  if (rm.moveRailEntryBetweenEdges) {
+    // left -> bottom, before target
+    let c3 = { bar: { rails: {
+      left:  { left: [{id:'n'}], center: [], right: [] },
+      bottom:{ left: [{id:'x'},{id:'y'}], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'bottom', 'left', 0, false), true, 'cross-edge before x')
+    assertEqual(c3.bar.rails.left.left.length, 0, 'source edge emptied')
+    assertEqual(c3.bar.rails.bottom.left.map(e=>e.id).join(','), 'n,x,y', 'dest order n,x,y')
+    // same-edge passthrough still identity-safe via generalized fn
+    c3 = { bar: { rails: {
+      left:  { left: [{id:'a'},{id:'b'}], center: [], right: [] },
+      bottom:{ left: [], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'left', 'left', 0, true), false, 'drop on self after == identity')
+    assertEqual(c3.bar.rails.left.left.map(e=>e.id).join(','), 'a,b', 'identity preserved')
+    // real swap: a after b
+    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'left', 'left', 1, true), true, 'a after b swaps')
+    assertEqual(c3.bar.rails.left.left.map(e=>e.id).join(','), 'b,a', 'swap applied')
+    // append to empty section on other edge (fresh source state)
+    c3 = { bar: { rails: {
+      left:  { left: [{id:'a'}], center: [], right: [] },
+      bottom:{ left: [], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] } } } }
+    rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'right', 'center', -1, false)
+    assertEqual(c3.bar.rails.right.center.map(e=>e.id).join(','), 'a', 'cross-edge append empty')
+    // bad index
+    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 9, 'top', 'left', -1, false), false, 'bad fromIndex false')
+  }
+  if (rm.moveRailEntryToBarAt) {
+    let c4 = { bar: { layout: { left: [{id:'L1'}] }, rails: { bottom: { left: [{id:'r1'},{id:'r2'}], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 1, 'left', 1), true, 'rail->bar insert middle')
+    assertEqual(c4.bar.rails.bottom.left.map(e=>e.id).join(','), 'r1', 'rail lost r2')
+    assertEqual(c4.bar.layout.left.map(e=>e.id).join(','), 'L1,r2', 'bar gains r2 at index 1')
+    // append when index out of range
+    assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 0, 'right', 7), true, 'overflow index appends')
+    let right = c4.bar.layout.right || []
+    assertEqual(right.map(e=>e.id).join(','), 'r1', 'appended to right')
+    // bad fromIndex
+    assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 5, 'left', 0), false, 'bad rail index false')
+  }
   if (rm.moveRailEntryAt) {
     // REGRESSION: duplicate ids made name-based drops land on the wrong one.
     // left=[cb,net,a,a], drag net(idx1) after first a(idx2) → [cb,a,net,a]

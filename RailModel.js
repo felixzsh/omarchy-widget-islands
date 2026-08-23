@@ -313,6 +313,60 @@ function railReferencedIds(rails) {
   return out
 }
 
+// 3.7 universal — rail → other rail (cross-edge). Same index/after protocol as
+// moveRailEntryAt, but source and destination live on DIFFERENT edges.
+function moveRailEntryBetweenEdges(config, fromEdge, fromSection, fromIndex, toEdge, toSection, targetIndex, after) {
+  var fromEntries = rawRailSection(config, fromEdge, fromSection)
+  var toEntries = rawRailSection(config, toEdge, toSection)
+  if (!Array.isArray(fromEntries) || fromIndex < 0 || fromIndex >= fromEntries.length) return false
+
+  var toIndex
+  if (toEntries.length === 0 || targetIndex < 0 || targetIndex >= toEntries.length) {
+    toIndex = toEntries.length
+  } else {
+    toIndex = after ? targetIndex + 1 : targetIndex
+  }
+
+  var sameEdge = fromEdge === toEdge && fromSection === toSection
+  if (sameEdge && (targetIndex === fromIndex || (after && targetIndex + 1 === fromIndex))) return false
+
+  var movedEntry = fromEntries[fromIndex]
+  fromEntries.splice(fromIndex, 1)
+
+  if (sameEdge) {
+    if (fromIndex < toIndex) toIndex -= 1
+    if (toIndex < 0) toIndex = 0
+    if (toIndex > toEntries.length) toIndex = toEntries.length
+    if (fromIndex === toIndex) {
+      fromEntries.splice(fromIndex, 0, movedEntry)
+      return false
+    }
+  }
+
+  toEntries.splice(toIndex, 0, movedEntry)
+  return true
+}
+
+// 3.7 universal — rail → native bar. Source index-addressed within its section
+// (duplicate ids safe); destination is a bar layout region with an insert-
+// before index derived from visible slot order (-1 / overflow = append).
+function moveRailEntryToBarAt(config, fromEdge, fromSection, fromIndex, toRegion, toIndex) {
+  var fromEntries = rawRailSection(config, fromEdge, fromSection)
+  if (!Array.isArray(fromEntries) || fromIndex < 0 || fromIndex >= fromEntries.length) return false
+
+  if (!isPlainObject(config.bar)) config.bar = {}
+  if (!isPlainObject(config.bar.layout)) config.bar.layout = {}
+  if (!Array.isArray(config.bar.layout[toRegion])) config.bar.layout[toRegion] = []
+
+  var toEntries = config.bar.layout[toRegion]
+  var destIndex = toIndex < 0 || toIndex > toEntries.length ? toEntries.length : toIndex
+
+  var movedEntry = fromEntries[fromIndex]
+  fromEntries.splice(fromIndex, 1)
+  toEntries.splice(destIndex, 0, movedEntry)
+  return true
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isPlainObject: isPlainObject,
@@ -336,6 +390,8 @@ if (typeof module !== "undefined") {
     moveRailEntry: moveRailEntry,
     moveRailEntryAt: moveRailEntryAt,
     moveBarEntryToRail: moveBarEntryToRail,
+    moveRailEntryBetweenEdges: moveRailEntryBetweenEdges,
+    moveRailEntryToBarAt: moveRailEntryToBarAt,
     railReferencedIds: railReferencedIds
   }
 }

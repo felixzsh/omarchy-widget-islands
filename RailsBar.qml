@@ -47,6 +47,27 @@ Item {
     })
     property int barConfigSerial: 0
 
+    // 3.7 universal — cross-panel rail drag coordination. The panel that
+    // starts a rail widget drag publishes its edge + live cursor here; peer
+    // panels compute their own island offers from it, and the source resolves
+    // claims across all railPanels at release.
+    property string universalDragEdge: ""
+    property real universalDragX: 0
+    property real universalDragY: 0
+    property var railPanels: []
+    function registerRailPanel(p) {
+        if (!p) return
+        var next = railPanels.slice()
+        if (next.indexOf(p) !== -1) return
+        next.push(p)
+        railPanels = next
+    }
+    function unregisterRailPanel(p) {
+        var next = railPanels.filter(function(t) { return t !== p })
+        if (next.length === railPanels.length) return
+        railPanels = next
+    }
+
     // 3.7 — keep plugin bar-widgets registered while they live in rails (the
     // core's isEnabled() only scans bar.layout/plugins/bar.id, so a rail
     // placement alone reads as "disabled" and the core sweep drops them).
