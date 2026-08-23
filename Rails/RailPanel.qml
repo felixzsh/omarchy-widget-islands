@@ -109,13 +109,24 @@ PanelWindow {
     property bool railToBarAfter: false
     property var railToBarGeometry: null
 
+    function barSurfaceWindow() {
+        var b = barApi
+        var slots = typeof b.moduleSlots !== "undefined" ? b.moduleSlots : []
+        for (var i = 0; i < slots.length; i++) {
+            var sl = slots[i]
+            if (sl && sl.QsWindow && sl.QsWindow.window) return sl.QsWindow.window
+        }
+        return null
+    }
+
     function barOrigin() {
         var b = barApi
+        var w = barSurfaceWindow()
         var ox = 0
         var oy = 0
-        if (b && screen) {
-            if (b.position === "bottom") oy = Math.max(0, screen.height - b.height)
-            else if (b.position === "right") ox = Math.max(0, screen.width - b.width)
+        if (w && w.screen) {
+            if (b.position === "bottom") oy = Math.max(0, w.screen.height - w.height)
+            else if (b.position === "right") ox = Math.max(0, w.screen.width - w.width)
         }
         return { x: ox, y: oy }
     }
@@ -173,12 +184,32 @@ PanelWindow {
         barDropGeometry = null
     }
 
+    // The core's own barDragScreenX/Y silently lose the edge offset whenever
+    // its internal window lookup fails (observed: bottom/right bars report raw
+    // window-local coords — masked when the bar sits at top, where local ==
+    // screen). Derive the screen point ourselves from the always-correct
+    // LOCAL coords plus the real surface via QsWindow.
+    function barDragScreenPoint() {
+        var b = barApi
+        var lx = b.barDragSceneX
+        var ly = b.barDragSceneY
+        var w = b.barDragWindow || (b.barDragSource ? b.barDragSource.QsWindow.window : null)
+        var ox = 0
+        var oy = 0
+        if (w && w.screen) {
+            if (b.position === "bottom") oy = Math.max(0, w.screen.height - w.height)
+            else if (b.position === "right") ox = Math.max(0, w.screen.width - w.width)
+        }
+        return { x: ox + lx, y: oy + ly }
+    }
+
     function updateBarDropTarget() {
         if (!barDragging || !barApi.barDragSource) { clearBarDrop(); return }
+        var sp = barDragScreenPoint()
         var src = barApi.barDragSource
         barCrossSource = { region: String(src.region || ""), moduleName: String(src.moduleName || "") }
 
-        updateIncomingOffers(px, py)
+        updateIncomingOffers(sp.x, sp.y)
     }
 
     // 3.7 universal — a RAIL-initiated drag from another edge hovering near us.
@@ -494,8 +525,7 @@ PanelWindow {
         if (!src || !canMutateRail) {
             console.warn("[RAIL] drop: CANCEL",
                 "src=", src ? (src.moduleName + "@" + src.section) : "null",
-                "homeTgt=", homeTgt ? (homeTgt.isPlaceholder ? "PH@" + homeTgt.section : homeTgt.moduleName + "@" + homeTgt.section) : "null",
-                "peer=", peer ? peer.edge : "-", "bar=", barTgt ? "yes" : "-")
+                "peer=", peer ? peer.edge : "-", "bar=", !!barTgt, "home=", !!homeTgt)
             return
         }
 
