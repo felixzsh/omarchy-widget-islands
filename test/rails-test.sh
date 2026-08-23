@@ -181,6 +181,28 @@ if (typeof normalizeFn === 'function') {
     c = freshConfig()
     assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'zz', 'center', ''), false, 'missing id returns false')
   }
+  if (rm.moveBarEntryToRail) {
+    // bar layout → rail section, before target
+    let c2 = { bar: { position: 'top', layout: { left: [{id:'tray'},{id:'net'}] },
+      rails: { bottom: { left: [], center: [{id:'x'}], right: [] } } } }
+    assertEqual(rm.moveBarEntryToRail(c2, 'net', 'left', 'bottom', 'center', 0, false), true, 'bar->rail before x')
+    assertEqual(c2.bar.layout.left.map(e => e.id).join(','), 'tray', 'bar layout loses net')
+    assertEqual(c2.bar.rails.bottom.center.map(e => e.id).join(','), 'net,x', 'rail center gains net before x')
+    // append to empty rail section (targetIndex -1)
+    c2 = { bar: { layout: { center: [{id:'clock'}] }, rails: { top: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.moveBarEntryToRail(c2, 'clock', 'center', 'top', 'right', -1, false), true, 'bar->rail append empty')
+    assertEqual(c2.bar.rails.top.right.map(e => e.id).join(','), 'clock', 'empty right gains clock')
+    // after=true inserts past target
+    c2 = { bar: { layout: { right: [{id:'a'}] }, rails: { left: { left: [{id:'p'},{id:'q'}], center: [], right: [] } } } }
+    rm.moveBarEntryToRail(c2, 'a', 'right', 'left', 'left', 0, true)
+    assertEqual(c2.bar.rails.left.left.map(e => e.id).join(','), 'p,a,q', 'after=true lands past p')
+    // preserves entry object shape
+    c2 = { bar: { layout: { left: [{id:'aud', pinned: true}] }, rails: { bottom: { left: [], center: [], right: [] } } } }
+    rm.moveBarEntryToRail(c2, 'aud', 'left', 'bottom', 'center', -1, false)
+    assertEqual(c2.bar.rails.bottom.center[0].pinned, true, 'entry object preserved')
+    // missing id
+    assertEqual(rm.moveBarEntryToRail({bar:{layout:{left:[]},rails:{}}}, 'nope', 'left', 'top', 'left', -1, false), false, 'bar->rail missing id false')
+  }
   if (rm.moveRailEntryAt) {
     // REGRESSION: duplicate ids made name-based drops land on the wrong one.
     // left=[cb,net,a,a], drag net(idx1) after first a(idx2) → [cb,a,net,a]

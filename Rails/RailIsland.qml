@@ -221,6 +221,22 @@ PanelWindow {
         }
     }
 
+    // 3.7 — insertion line for the active drop target, painted by the OWNING
+    // island (same-layer Overlay stacking across windows is map-order
+    // dependent; inside one window z-order is deterministic).
+    Rectangle {
+        readonly property var r: dragHost ? dragHost.localDropGeometry(root) : null
+
+        visible: r !== null
+        x: r ? Math.round(r.x) : 0
+        y: r ? Math.round(r.y) : 0
+        width: r ? r.width : 0
+        height: r ? r.height : 0
+        color: Color.accent
+        radius: Math.min(width, height) / 2
+        z: 100
+    }
+
     component IslandCatcher: PanelWindow {
         required property var catcherScreen
         visible: false
@@ -264,7 +280,7 @@ PanelWindow {
     IslandCatcher {
         catcherScreen: root.screen
         visible: root.visible && root.clickMode && root.catcherArmed
-            && !(root.dragHost && root.dragHost.railDragActive)
+            && !(root.dragHost && root.dragHost.dragModeActive)
     }
 
     // Duck-contract proxy over the main bar. Everything delegates to innerBar

@@ -262,6 +262,33 @@ function moveRailEntryAt(config, edge, fromSection, fromIndex, toSection, target
   return true
 }
 
+// 3.7 — bar → rail move. Source is config.bar.layout[fromRegion], addressed by
+// NAME (upstream parity: bar's own dropBarModule is name-addressed too, and a
+// slot index into moduleSlots does not map to layout order). Destination uses
+// the same index/after protocol as moveRailEntryAt.
+function moveBarEntryToRail(config, name, fromRegion, edge, toSection, targetIndex, after) {
+  if (!isPlainObject(config.bar)) config.bar = {}
+  if (!isPlainObject(config.bar.layout)) config.bar.layout = {}
+  if (!Array.isArray(config.bar.layout[fromRegion])) config.bar.layout[fromRegion] = []
+
+  var fromEntries = config.bar.layout[fromRegion]
+  var fromIndex = rawRailEntryIndex(fromEntries, name)
+  if (fromIndex < 0) return false
+
+  var toEntries = rawRailSection(config, edge, toSection)
+  var toIndex
+  if (toEntries.length === 0 || targetIndex < 0 || targetIndex >= toEntries.length) {
+    toIndex = toEntries.length
+  } else {
+    toIndex = after ? targetIndex + 1 : targetIndex
+  }
+
+  var movedEntry = fromEntries[fromIndex]
+  fromEntries.splice(fromIndex, 1)
+  toEntries.splice(toIndex, 0, movedEntry)
+  return true
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isPlainObject: isPlainObject,
@@ -283,6 +310,7 @@ if (typeof module !== "undefined") {
     frameVisible: frameVisible,
     railsVisible: railsVisible,
     moveRailEntry: moveRailEntry,
-    moveRailEntryAt: moveRailEntryAt
+    moveRailEntryAt: moveRailEntryAt,
+    moveBarEntryToRail: moveBarEntryToRail
   }
 }

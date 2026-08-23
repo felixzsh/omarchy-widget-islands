@@ -78,6 +78,132 @@ PanelWindow {
     readonly property bool canMutateRail: barApi !== null && barApi.shell !== null
         && typeof barApi.shell.mutateShellConfig === "function"
 
+    // 3.7 — universal DnD step 1: BAR → RAIL. While the native bar drags one
+    // of ITS widgets, this rail reveals all islands and tracks the cursor to
+    // offer drop targets. The bar's own intra-bar behavior is untouched; we
+    // only observe public state (barDragSource/barDragScreenX/Y).
+    readonly property bool barDragging: barApi !== null && barApi.barDragSource !== null
+    readonly property bool dragModeActive: railDragActive || barDragging
+
+    // Source identity captured CONTINUOUSLY while the bar drags — the bar
+    // clears barDragSource before deciding its own drop, so reading it at
+    // release time would already be too late.
+    property var barCrossSource: null
+    property var barDropTargetSlot: null
+    property bool barDropAfter: false
+    property var barDropGeometry: null
+
+    function clearBarDrop() {
+        barCrossSource = null
+        barDropTargetSlot = null
+        barDropAfter = false
+        barDropGeometry = null
+    }
+
+    function updateBarDropTarget() {
+        if (!barDragging || !barApi.barDragSource) { clearBarDrop(); return }
+        var src = barApi.barDragSource
+        barCrossSource = { region: String(src.region || ""), moduleName: String(src.moduleName || "") }
+
+        var px = barApi.barDragScreenX
+        var py = barApi.barDragScreenY
+
+        barDropTargetSlot = null
+        barDropAfter = false
+        barDropGeometry = null
+        if (!pointerInRailZone(edge, px, py)) return
+
+        // Same selection mechanics as intra-rail: EVERY visible island's slots
+        // (+ empty-tab placeholders) compete by proximity; the zone gate above
+        // is the only containment. Between two tabs the line pins to the
+        // nearest island's edge — identical to a rail-initiated drag.
+        var cands = []
+        for (var i = 0; i < islands.length; i++) {
+            var isl = islands[i]
+            if (!isl || !isl.visible) continue
+            var bio = isl.screenOrigin()
+            for (var j = 0; j < isl.moduleSlots.length; j++) {
+                var s = isl.moduleSlots[j]
+                if (!s || !s.visible || s.width <= 0 || s.height <= 0) continue
+                var sp = { x: 0, y: 0 }
+                try { sp = s.mapToItem(null, 0, 0) } catch (e) { continue }
+                cands.push({ slot: s, x: bio.x + sp.x, y: bio.y + sp.y, width: s.width, height: s.height })
+            }
+            if (isl.moduleSlots.length === 0) {
+                var tp = isl.tabPoint()
+                cands.push({ slot: isl.placeholderTarget, x: bio.x + tp.x, y: bio.y + tp.y,
+                             width: isl.placeholderTarget.width, height: isl.placeholderTarget.height })
+            }
+        }
+
+        var drop = BarModel.nearestDropTarget(cands, { x: px, y: py }, !isHorizontal)
+        // Canonicalize interior seams like the intra-rail path does.
+        if (drop && drop.after && !drop.slot.isPlaceholder) {
+            var cIsl = drop.slot.host
+            var cIdx = slotIndexIn(cIsl ? cIsl.moduleSlots : [], drop.slot)
+            if (cIdx >= 0 && cIdx + 1 < cIsl.moduleSlots.length) {
+                var nxt = cIsl.moduleSlots[cIdx + 1]
+                if (nxt && nxt.visible) drop = { slot: nxt, after: false }
+            }
+        }
+        if ((drop ? drop.slot : null) !== barDropTargetSlot)
+            console.warn("[RAIL] bar-drop-target:", edge,
+                drop ? ((drop.slot.isPlaceholder ? "PH@" : drop.slot.moduleName + "@") + drop.slot.section
+                    + " after=" + drop.after) : "null")
+        barDropTargetSlot = drop ? drop.slot : null
+        barDropAfter = drop ? drop.after : false
+        barDropGeometry = drop ? railDropMarkerRect(drop.slot, drop.after) : null
+    }
+
+    // 3.7 — insertion line is painted INSIDE the owning island's window.
+    // Islands and the ghost window share WlrLayer.Overlay and same-layer
+    // stacking is map-order dependent (bar drags map everything at once →
+    // line ended up under the tabs). Drawing locally is deterministic.
+    // Returns window-local rect when THIS island owns the drop target.
+    function localDropGeometry(isl) {
+        var g = railDragTargetGeometry || barDropGeometry
+        var tgt = railDragTargetSlot || barDropTargetSlot
+        if (!g || !tgt || tgt.host !== isl) return null
+        var io = isl.screenOrigin()
+        return { x: g.x - io.x, y: g.y - io.y, width: g.width, height: g.height }
+    }
+
+    function finishBarDropToRail() {
+        var tgt = barDropTargetSlot
+        var after = barDropAfter
+        var srcInfo = barCrossSource
+        clearBarDrop()
+        if (!tgt || !srcInfo || !srcInfo.region || !srcInfo.moduleName) return
+        if (!canMutateRail) return
+
+        // Destination index within the target island's slot order mirrors the
+        // section layout (same protocol as finishRailDrag). Placeholder = append.
+        var isl = tgt.host
+        var tgtIdx = tgt.isPlaceholder ? -1 : slotIndexIn(isl ? isl.moduleSlots : [], tgt)
+
+        console.warn("[RAIL] bar-drop:", edge,
+            srcInfo.moduleName + "@" + srcInfo.region,
+            "->", (tgt.isPlaceholder ? "append@" + tgt.section
+                : tgt.moduleName + "@" + tgt.section + "[" + tgtIdx + "]"),
+            "after=" + after)
+
+        barApi.shell.mutateShellConfig(function(config) {
+            var changed = RailModel.moveBarEntryToRail(
+                config, srcInfo.moduleName, srcInfo.region, edge, tgt.section, tgtIdx, after)
+            console.warn("[RAIL] bar-drop result:", changed ? "MOVED" : "NOT MOVED")
+        })
+    }
+
+    Connections {
+        target: barApi
+        function onBarDragSourceChanged() {
+            if (barApi && barApi.barDragSource) railWindow.updateBarDropTarget()
+            else railWindow.finishBarDropToRail()
+        }
+        function onBarDragScreenXChanged() { if (railWindow.barDragging) railWindow.updateBarDropTarget() }
+        function onBarDragScreenYChanged() { if (railWindow.barDragging) railWindow.updateBarDropTarget() }
+    }
+
     // 3.7 — acceptance zone: drops and empty-tab reveals only count while the
     // dragged pointer sits at THIS rail's edge, inside the trapped span
     // (+grace). Mirrors the native bar, which ignores releases outside its
@@ -390,7 +516,7 @@ PanelWindow {
             railWindow.hoveredSection = sec
             // 3.5 — hover trigger: reveal the island for a dotful section
             // (frozen while a widget is being dragged)
-            if (sec !== "" && !railWindow.railDragActive
+            if (sec !== "" && !railWindow.dragModeActive
                 && sec !== railWindow.activeSection
                 && RailModel.sectionHasWidgets(railWindow.railLayout, sec)) {
                 console.warn("[RAIL]", railWindow.edge, "hover-activate:", sec)
@@ -406,7 +532,7 @@ PanelWindow {
         id: hoverCloseTimer
         interval: 180
         onTriggered: {
-            if (railWindow.railDragActive) return
+            if (railWindow.dragModeActive) return
             if (railHover.hovered) return
             for (var i = 0; i < islands.length; i++) {
                 var isl = islands[i]
@@ -464,7 +590,7 @@ PanelWindow {
                 clickMode: railWindow.trigger === "click"
                 dragHost: railWindow
                 visible: railWindow.shouldShow && !remapGuard.remapping
-                    && (railWindow.railDragActive
+                    && (railWindow.dragModeActive
                         || (railWindow.activeSection === modelData && entries.length > 0))
                 onCloseRequested: if (!railWindow.railDragActive) railWindow.activeSection = ""
                 onPointerInsideChanged: {
@@ -489,14 +615,16 @@ PanelWindow {
     component RailDragGhostPanel: PanelWindow {
         id: ghostWindow
 
-        readonly property bool active: railWindow.railDragActive
+        readonly property bool active: railWindow.dragModeActive
         readonly property var sourceItem: railWindow.railDragSourceSlot
             ? railWindow.railDragSourceSlot.activeItem : null
         readonly property int ghostPadding: Style.space(1)
         readonly property int ghostWidth: sourceItem ? Math.max(1, Math.ceil(sourceItem.width)) : 1
         readonly property int ghostHeight: sourceItem ? Math.max(1, Math.ceil(sourceItem.height)) : 1
 
-        visible: active && sourceItem !== null
+        // Maps during BOTH drag kinds: rail drags show the ghost item + line,
+        // bar drags only our island insertion lines (the bar paints its own).
+        visible: active
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "omarchy-rails-drag-ghost-" + railWindow.edge
@@ -514,6 +642,8 @@ PanelWindow {
         mask: Region {}
 
         Item {
+            // Rail-initiated drags only: the bar paints its own ghost natively.
+            visible: railWindow.railDragActive && railWindow.railDragImageUrl !== ""
             x: Math.round(railWindow.railDragScreenX - railWindow.railDragOffsetX - ghostWindow.ghostPadding)
             y: Math.round(railWindow.railDragScreenY - railWindow.railDragOffsetY - ghostWindow.ghostPadding)
             width: ghostWindow.ghostWidth + ghostWindow.ghostPadding * 2
@@ -537,17 +667,8 @@ PanelWindow {
             }
         }
 
-        Rectangle {
-            readonly property var targetRect: railWindow.railDragTargetGeometry
-
-            visible: ghostWindow.active && targetRect !== null
-            x: targetRect ? Math.round(targetRect.x) : 0
-            y: targetRect ? Math.round(targetRect.y) : 0
-            width: targetRect ? targetRect.width : 0
-            height: targetRect ? targetRect.height : 0
-            color: Color.accent
-            radius: Math.min(width, height) / 2
-        }
+        // NOTE: no insertion line here anymore — islands paint their own
+        // segment via localDropGeometry() (deterministic z-order).
     }
 
     RailDragGhostPanel {
