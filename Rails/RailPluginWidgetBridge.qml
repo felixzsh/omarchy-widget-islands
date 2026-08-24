@@ -59,6 +59,20 @@ Item {
         owned = next
     }
 
+    // Plugin reload storms (any install/uninstall touches every local plugin)
+    // destroy THIS tree — and with it the QML context our components were
+    // created from. Registered-but-zombie components then fail every future
+    // instantiation ("Cannot create a component in an invalid context") while
+    // reg.has(id) keeps us from ever refreshing them. Release our keys on the
+    // way out so the next incarnation registers fresh, valid ones.
+    Component.onDestruction: {
+        var reg = shell ? shell.barWidgetRegistry : null
+        if (!reg) return
+        for (var key in owned) {
+            if (owned[key] && owned[key].component && reg.has(key)) reg.unregister(key)
+        }
+    }
+
     function buildMeta(manifest) {
         var bw = manifest && manifest.barWidget ? manifest.barWidget : {}
         return {
