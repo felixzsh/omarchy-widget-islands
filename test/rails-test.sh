@@ -219,6 +219,29 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.railReferencedIds({}).length, 0, 'empty rails -> empty ids')
     assertEqual(rm.railReferencedIds(null).length, 0, 'null rails -> empty ids')
   }
+  if (rm.pruneRailGhosts) {
+    let g1 = { bar: { rails: {
+      bottom: { left: [{id:'ghost1'}, {id:'alive'}], center: ['ghost2'], right: [] },
+      top: { left: [], center: [], right: [] },
+      left: { left: [], center: [], right: [] },
+      right: { left: [{id:'ghost1'}], center: [{id:'kept'}], right: [] } } } }
+    assertEqual(rm.pruneRailGhosts(g1, ['ghost1', 'ghost2']), true, 'prune returns changed')
+    assertEqual(g1.bar.rails.bottom.left.map(e => e.id).join(','), 'alive', 'mixed section keeps alive')
+    assertEqual(g1.bar.rails.bottom.center.length, 0, 'string ghost removed')
+    assertEqual(g1.bar.rails.right.left.length, 0, 'same ghost across edges removed')
+    assertEqual(g1.bar.rails.right.center[0].id, 'kept', 'unlisted kept')
+    assertEqual(rm.pruneRailGhosts(g1, ['ghost1', 'ghost2']), false, 'second prune no-op')
+    let g2 = { bar: { rails: { bottom: { left: [{id:'omarchy.indicators'}], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
+      right: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.pruneRailGhosts(g2, ['ghost1']), false, 'built-in-like id untouched when not listed')
+    let g3 = { bar: { rails: { bottom: { left: [{id:'gone', pinned:true}, {id:'stay', format:'x'}], center: [], right: [] },
+      top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
+      right: { left: [], center: [], right: [] } } } }
+    rm.pruneRailGhosts(g3, ['gone'])
+    assertEqual(g3.bar.rails.bottom.left.length, 1, 'only ghost removed')
+    assertEqual(g3.bar.rails.bottom.left[0].format, 'x', 'survivor settings intact')
+  }
   if (rm.moveRailEntryBetweenEdges) {
     // left -> bottom, before target
     let c3 = { bar: { rails: {

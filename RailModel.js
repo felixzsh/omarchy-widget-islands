@@ -306,6 +306,38 @@ function railReferencedIds(rails) {
   return out
 }
 
+// 3.8 — drop ghost entries from rails config: ids whose plugin is gone from
+// disk AND absent from the widget registry (built-ins like omarchy.indicators
+// live in the registry, so they never match). Mirrors what the host does to
+// bar.layout on plugin disable/remove — rails get the same treatment because
+// the host's findEntryLocation doesn't know about bar.rails.
+function pruneRailGhosts(config, dropIds) {
+  var drop = {}
+  var list = Array.isArray(dropIds) ? dropIds : []
+  for (var i = 0; i < list.length; i++) drop[String(list[i])] = true
+  if (!isPlainObject(config) || !isPlainObject(config.bar) || !isPlainObject(config.bar.rails)) return false
+
+  var changed = false
+  var edges = ["top", "bottom", "left", "right"]
+  var sections = ["left", "center", "right"]
+  for (var e = 0; e < edges.length; e++) {
+    var layout = config.bar.rails[edges[e]]
+    if (!isPlainObject(layout)) continue
+    for (var s = 0; s < sections.length; s++) {
+      var arr = layout[sections[s]]
+      if (!Array.isArray(arr)) continue
+      var kept = []
+      for (var j = 0; j < arr.length; j++) {
+        var id = entryId(arr[j])
+        if (id && drop[id]) changed = true
+        else kept.push(arr[j])
+      }
+      layout[sections[s]] = kept
+    }
+  }
+  return changed
+}
+
 // 3.7 universal — rail → other rail (cross-edge). Same index/after protocol as
 // moveRailEntryAt, but source and destination live on DIFFERENT edges.
 function moveRailEntryBetweenEdges(config, fromEdge, fromSection, fromIndex, toEdge, toSection, targetIndex, after) {
@@ -406,6 +438,7 @@ if (typeof module !== "undefined") {
     moveRailEntryToBarAt: moveRailEntryToBarAt,
     barLayoutSection: barLayoutSection,
     barEntryIndexOfOccurrence: barEntryIndexOfOccurrence,
-    railReferencedIds: railReferencedIds
+    railReferencedIds: railReferencedIds,
+    pruneRailGhosts: pruneRailGhosts
   }
 }

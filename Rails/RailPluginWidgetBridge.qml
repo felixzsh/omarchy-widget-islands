@@ -32,19 +32,43 @@ Item {
     onRailsConfigChanged: sync()
     onCfgSerialChanged: sync()
 
+    // Plugin install/uninstall events arrive in a STORM (dozens of reload
+    // signals per action) while the host rebuilds every plugin tree. Acting
+    // per-event amplifies that: component/service churn + config writes during
+    // the storm froze the shell and once lost widgets to a write race. So all
+    // plugin-event work goes through ONE settle timer — single sync + single
+    // prune, only once the storm has quieted (no scanning/reloading).
+    Timer {
+        id: settleTimer
+        interval: 3000
+        repeat: false
+        onTriggered: bridge.onSettle()
+    }
+
     // Safety net: core sweeps ride scan events whose ordering vs our triggers
-    // is undefined; a cheap periodic re-add closes any gap. No-op when idle.
+    // is undefined; a cheap periodic re-settle closes any gap. No-op when idle.
     Timer {
         interval: 4000
         running: bridge.shell !== null
         repeat: true
-        onTriggered: bridge.sync()
+        onTriggered: bridge.onSettle()
     }
 
     Connections {
         target: bridge.shell ? bridge.shell.pluginRegistry : null
-        function onPluginsChanged() { bridge.sync() }
-        function onScanFinished() { bridge.sync() }
+        function onPluginsChanged() { settleTimer.restart() }
+        function onScanFinished() { settleTimer.restart() }
+    }
+
+    function storming() {
+        return shell !== null && shell.pluginRegistry !== null
+            && (shell.pluginReloading === true || shell.pluginRegistry.scanning === true)
+    }
+
+    function onSettle() {
+        if (storming()) { settleTimer.restart(); return }
+        sync()
+        pruneGhosts()
     }
 
     function railIds() {
@@ -130,6 +154,32 @@ Item {
         shell.ensureService(id)
         if (!had && shell.serviceFor(id))
             console.warn("[RAIL] plugin-service bridge started:", id)
+    }
+
+    // One config write, after the storm settles. Ghosts = ids referenced in
+    // rails whose plugin is gone from disk AND absent from the widget
+    // registry (built-ins live in the registry, so never pruned). Mirrors the
+    // host pruning bar.layout on plugin remove — its findEntryLocation can't
+    // see bar.rails, so without this the dead dot would linger forever.
+    function pruneGhosts() {
+        var reg = shell ? shell.barWidgetRegistry : null
+        var plugins = shell && shell.pluginRegistry ? shell.pluginRegistry.installedPlugins : null
+        if (!reg || !plugins) return
+        if (typeof shell.mutateShellConfig !== "function") return
+
+        var wanted = railIds()
+        var ghosts = []
+        for (var i = 0; i < wanted.length; i++) {
+            var id = wanted[i]
+            if (!plugins[id] && !reg.has(id)) ghosts.push(id)
+        }
+        if (!ghosts.length) return
+
+        var dropIds = ghosts
+        shell.mutateShellConfig(function(config) {
+            if (RailModel.pruneRailGhosts(config, dropIds))
+                console.warn("[RAIL] pruned ghost rail entries:", dropIds.join(", "))
+        })
     }
 
     function loadIfNeeded(id, reg, plugins) {
