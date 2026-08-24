@@ -262,6 +262,51 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.ensurePluginsEnabled(null, ['x']), false, 'null config false')
     assertEqual(rm.ensurePluginsEnabled({}, []), false, 'empty ids false')
   }
+  if (rm.railReconcilePlan) {
+    // REGRESIÓN (el caso que rompió el fix anterior): plugin desinstalado
+    // pero con su id aún en config.plugins → isEnabled() devuelve TRUE
+    // (envenenado por la entrada fantasma). El plan debe PODARLO igual.
+    let p1 = rm.railReconcilePlan(
+      ['akshar.radio-atlas'],
+      {},                                                    // no instalado
+      function() { return false },                           // no en registry
+      function() { return true })                            // isEnabled envenenado = true
+    assertEqual(p1.ghosts.indexOf('akshar.radio-atlas') !== -1, true, 'REGRESSION: uninstalled-but-in-plugins[] still pruned')
+    // instalado + no-enabled → toEnable
+    let p2 = rm.railReconcilePlan(['felixzsh.codexbar'],
+      { 'felixzsh.codexbar': { id: 'felixzsh.codexbar' } },
+      function() { return false },
+      function() { return false })
+    assertEqual(p2.toEnable.length, 1, 'installed not-enabled -> toEnable')
+    assertEqual(p2.ghosts.length, 0, 'no ghosts for installed')
+    // instalado + enabled → nada
+    let p3 = rm.railReconcilePlan(['felixzsh.codexbar'],
+      { 'felixzsh.codexbar': {} },
+      function() { return true },
+      function() { return true })
+    assertEqual(p3.toEnable.length + p3.ghosts.length, 0, 'installed enabled -> no-op')
+    // built-in: no instalado pero SÍ en registry → nada
+    let p4 = rm.railReconcilePlan(['omarchy.indicators'],
+      {},
+      function(id) { return id === 'omarchy.indicators' },
+      function() { return false })
+    assertEqual(p4.ghosts.length, 0, 'built-in in registry never ghosted')
+    // uninstalled sin registry → ghost
+    let p5 = rm.railReconcilePlan(['dead.plugin'],
+      {},
+      function() { return false },
+      function() { return false })
+    assertEqual(p5.ghosts.indexOf('dead.plugin') !== -1, true, 'plain uninstall ghosted')
+  }
+  if (rm.prunePluginsEnabled) {
+    let pl1 = { plugins: [{ id: 'a' }, { id: 'dead' }, 'rawstring'] }
+    assertEqual(rm.prunePluginsEnabled(pl1, ['dead']), true, 'prune removes stale marker')
+    assertEqual(pl1.plugins.length, 2, 'keeps others')
+    assertEqual(pl1.plugins[0].id, 'a', 'survivor intact')
+    assertEqual(pl1.plugins[1], 'rawstring', 'raw strings untouched')
+    assertEqual(rm.prunePluginsEnabled(pl1, ['nope']), false, 'no-op when absent')
+    assertEqual(rm.prunePluginsEnabled({}, ['a']), false, 'missing list no-op')
+  }
   if (rm.moveRailEntryBetweenEdges) {
     // left -> bottom, before target
     let c3 = { bar: { rails: {

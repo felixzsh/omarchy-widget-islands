@@ -435,6 +435,63 @@ function moveRailEntryToBarAt(config, fromEdge, fromSection, fromIndex, toRegion
   return true
 }
 
+// 3.8 — remove ids from config.plugins (stale "enabled" markers left behind
+// when a rail-hosted plugin is uninstalled without the host's disable path
+// firing; they'd keep isEnabled() true forever and break reinstalls).
+function prunePluginsEnabled(config, ids) {
+  if (!isPlainObject(config) || !Array.isArray(config.plugins)) return false
+  var drop = {}
+  var list = Array.isArray(ids) ? ids : []
+  for (var i = 0; i < list.length; i++) drop[String(list[i])] = true
+  var kept = []
+  var changed = false
+  for (var j = 0; j < config.plugins.length; j++) {
+    var e = config.plugins[j]
+    if (isPlainObject(e) && drop[entryId(e)]) changed = true
+    else kept.push(e)
+  }
+  config.plugins = kept
+  return changed
+}
+
+// 3.8 — PURE decision logic for bridge.reconcile(), extracted so it is
+// unit-testable (the QML side just executes the plan in ONE config write).
+//
+// Ghost detection must NEVER use isEnabled(): once we add a rail-hosted
+// plugin to config.plugins, isEnabled() returns true for it, and a plugin
+// uninstalled without the host's disable path keeps that stale entry —
+// isEnabled stays true and the dot would linger forever. Ghosts are decided
+// purely on installedPlugins presence (with the registry guard protecting
+// bar-built-in widgets like omarchy.indicators, which are not plugins).
+function railReconcilePlan(wanted, installedKeys, registryHas, isEnabled) {
+  var list = Array.isArray(wanted) ? wanted : []
+  var hasInstalled = typeof installedKeys === "function" ? installedKeys
+    : function(key) {
+        if (!installedKeys) return false
+        if (typeof installedKeys.has === "function") return installedKeys.has(key)
+        return installedKeys[key] !== undefined && installedKeys[key] !== null
+      }
+  var hasRegistry = typeof registryHas === "function" ? registryHas : function() { return false }
+  var enabled = typeof isEnabled === "function" ? isEnabled : function() { return false }
+
+  var toEnable = []
+  var ghosts = []
+  for (var i = 0; i < list.length; i++) {
+    var id = String(list[i])
+    if (!id) continue
+    if (hasInstalled(id)) {
+      // Installed: unlock the native lifecycle via config.plugins (the
+      // host's own "enabled without a bar slot" mechanism) when needed.
+      if (!enabled(id)) toEnable.push(id)
+    } else if (!hasRegistry(id)) {
+      // Uninstalled (or built-in absent from the registry): drop the rail
+      // entry — the host's findEntryLocation can't see rails to clean it.
+      ghosts.push(id)
+    }
+  }
+  return { toEnable: toEnable, ghosts: ghosts }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isPlainObject: isPlainObject,
@@ -462,6 +519,8 @@ if (typeof module !== "undefined") {
     barEntryIndexOfOccurrence: barEntryIndexOfOccurrence,
     railReferencedIds: railReferencedIds,
     pruneRailGhosts: pruneRailGhosts,
-    ensurePluginsEnabled: ensurePluginsEnabled
+    ensurePluginsEnabled: ensurePluginsEnabled,
+    prunePluginsEnabled: prunePluginsEnabled,
+    railReconcilePlan: railReconcilePlan
   }
 }

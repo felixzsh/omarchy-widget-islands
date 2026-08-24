@@ -181,22 +181,24 @@ Item {
         if (typeof shell.pluginRegistry.isEnabled !== "function") return
         if (typeof shell.mutateShellConfig !== "function") return
 
-        var wanted = railIds()
-        var toEnable = []
-        var ghosts = []
-        for (var i = 0; i < wanted.length; i++) {
-            var id = wanted[i]
-            if (shell.pluginRegistry.isEnabled(id)) continue
-            if (plugins[id]) toEnable.push(id)
-            else if (!reg.has(id)) ghosts.push(id)
-        }
-        if (!toEnable.length && !ghosts.length) return
+        // Decision logic lives in RailModel.railReconcilePlan (pure, tested).
+        // Note: ghost detection is installedPlugins-based on purpose — using
+        // isEnabled() self-poisons via the config.plugins entries we add.
+        var plan = RailModel.railReconcilePlan(
+            railIds(),
+            plugins,
+            function(id) { return reg.has(id) },
+            function(id) { return shell.pluginRegistry.isEnabled(id) })
+        if (!plan.toEnable.length && !plan.ghosts.length) return
 
-        var addIds = toEnable
-        var dropIds = ghosts
+        var addIds = plan.toEnable
+        var dropIds = plan.ghosts
         shell.mutateShellConfig(function(config) {
             var changed = RailModel.ensurePluginsEnabled(config, addIds)
             changed = RailModel.pruneRailGhosts(config, dropIds) || changed
+            // Stale plugins[] markers for uninstalled ids would keep
+            // isEnabled() true forever and break reinstalls.
+            changed = RailModel.prunePluginsEnabled(config, dropIds) || changed
             if (changed)
                 console.warn("[RAIL] reconciled rail plugins:",
                     "add=", addIds.length ? addIds.join(",") : "-",
