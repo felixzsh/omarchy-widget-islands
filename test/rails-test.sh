@@ -242,6 +242,26 @@ if (typeof normalizeFn === 'function') {
     assertEqual(g3.bar.rails.bottom.left.length, 1, 'only ghost removed')
     assertEqual(g3.bar.rails.bottom.left[0].format, 'x', 'survivor settings intact')
   }
+  if (rm.ensurePluginsEnabled) {
+    let e1 = { version: 1 }
+    assertEqual(rm.ensurePluginsEnabled(e1, ['akshar.radio-atlas', 'felixzsh.codexbar']), true, 'adds missing plugins list')
+    assertEqual(Array.isArray(e1.plugins), true, 'plugins array created')
+    assertEqual(e1.plugins.length, 2, 'two ids added')
+    assertEqual(e1.plugins[0].id, 'akshar.radio-atlas', 'entry shape {id}')
+    // idempotente
+    assertEqual(rm.ensurePluginsEnabled(e1, ['akshar.radio-atlas']), false, 'existing id no-op')
+    assertEqual(e1.plugins.length, 2, 'no duplicates')
+    // preserva entradas existentes; el host exige {id} en plugins[], así que
+    // una entrada string cruda cuenta como ausente y se añade normalizada
+    let e2 = { plugins: [{ id: 'a' }, 'b'] }
+    assertEqual(rm.ensurePluginsEnabled(e2, ['a', 'b', 'c']), true, 'adds missing (string b normalized)')
+    assertEqual(e2.plugins.length, 4, 'a, b(string), b{id}, c')
+    assertEqual(e2.plugins[2].id, 'b', 'string entry normalized to {id}')
+    assertEqual(e2.plugins[3].id, 'c', 'appended at end')
+    // null config safe
+    assertEqual(rm.ensurePluginsEnabled(null, ['x']), false, 'null config false')
+    assertEqual(rm.ensurePluginsEnabled({}, []), false, 'empty ids false')
+  }
   if (rm.moveRailEntryBetweenEdges) {
     // left -> bottom, before target
     let c3 = { bar: { rails: {

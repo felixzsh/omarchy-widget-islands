@@ -29,8 +29,8 @@ Item {
     // registryKey -> { url: string, component: Component|null }
     property var owned: ({})
 
-    onRailsConfigChanged: sync()
-    onCfgSerialChanged: sync()
+    onRailsConfigChanged: reconcile()
+    onCfgSerialChanged: reconcile()
 
     // Plugin install/uninstall events arrive in a STORM (dozens of reload
     // signals per action) while the host rebuilds every plugin tree. Acting
@@ -68,7 +68,7 @@ Item {
     function onSettle() {
         if (storming()) { settleTimer.restart(); return }
         sync()
-        pruneGhosts()
+        reconcile()
     }
 
     function railIds() {
@@ -161,24 +161,46 @@ Item {
     // registry (built-ins live in the registry, so never pruned). Mirrors the
     // host pruning bar.layout on plugin remove — its findEntryLocation can't
     // see bar.rails, so without this the dead dot would linger forever.
-    function pruneGhosts() {
+    // Teach the host's OWN enablement system about rail placements. The host
+    // treats a plugin as enabled when its id sits in bar.layout, plugins[],
+    // or bar.id — nothing knows bar.rails. Adding rail-hosted ids to
+    // config.plugins (the host's native "enabled without a bar slot" list)
+    // unlocks every lifecycle through the CORE: widget registration, service
+    // sync, and the panel/overlay loader that summon/toggle route through
+    // (isEnabled() gates all three).
+    //
+    // The same single write also prunes rail entries that are no longer
+    // host-enabled (uninstalled OR explicitly disabled) — main-bar parity,
+    // since the host's findEntryLocation can't see rails to clean them.
+    // The registry guard keeps bar-built-in widgets (omarchy.indicators,
+    // keyboard-layout, ...) which live outside installedPlugins safe.
+    function reconcile() {
         var reg = shell ? shell.barWidgetRegistry : null
         var plugins = shell && shell.pluginRegistry ? shell.pluginRegistry.installedPlugins : null
         if (!reg || !plugins) return
+        if (typeof shell.pluginRegistry.isEnabled !== "function") return
         if (typeof shell.mutateShellConfig !== "function") return
 
         var wanted = railIds()
+        var toEnable = []
         var ghosts = []
         for (var i = 0; i < wanted.length; i++) {
             var id = wanted[i]
-            if (!plugins[id] && !reg.has(id)) ghosts.push(id)
+            if (shell.pluginRegistry.isEnabled(id)) continue
+            if (plugins[id]) toEnable.push(id)
+            else if (!reg.has(id)) ghosts.push(id)
         }
-        if (!ghosts.length) return
+        if (!toEnable.length && !ghosts.length) return
 
+        var addIds = toEnable
         var dropIds = ghosts
         shell.mutateShellConfig(function(config) {
-            if (RailModel.pruneRailGhosts(config, dropIds))
-                console.warn("[RAIL] pruned ghost rail entries:", dropIds.join(", "))
+            var changed = RailModel.ensurePluginsEnabled(config, addIds)
+            changed = RailModel.pruneRailGhosts(config, dropIds) || changed
+            if (changed)
+                console.warn("[RAIL] reconciled rail plugins:",
+                    "add=", addIds.length ? addIds.join(",") : "-",
+                    "drop=", dropIds.length ? dropIds.join(",") : "-")
         })
     }
 

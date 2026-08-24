@@ -338,6 +338,28 @@ function pruneRailGhosts(config, dropIds) {
   return changed
 }
 
+// 3.8 — mark plugins enabled via the host's OWN config.plugins list (the
+// "enabled without a bar slot" mechanism). Rail placements are invisible to
+// the host's isEnabled() (findEntryLocation only scans bar.layout/plugins/
+// bar.id), so rail-hosted plugins get added here to unlock the NATIVE
+// widget/service/panel lifecycles instead of mirroring them in the bridge.
+function ensurePluginsEnabled(config, ids) {
+  if (!isPlainObject(config)) return false
+  if (!Array.isArray(config.plugins)) config.plugins = []
+  var changed = false
+  var list = Array.isArray(ids) ? ids : []
+  for (var i = 0; i < list.length; i++) {
+    var key = String(list[i])
+    var found = false
+    for (var j = 0; j < config.plugins.length; j++) {
+      var e = config.plugins[j]
+      if (isPlainObject(e) && entryId(e) === key) { found = true; break }
+    }
+    if (!found) { config.plugins.push({ id: key }); changed = true }
+  }
+  return changed
+}
+
 // 3.7 universal — rail → other rail (cross-edge). Same index/after protocol as
 // moveRailEntryAt, but source and destination live on DIFFERENT edges.
 function moveRailEntryBetweenEdges(config, fromEdge, fromSection, fromIndex, toEdge, toSection, targetIndex, after) {
@@ -439,6 +461,7 @@ if (typeof module !== "undefined") {
     barLayoutSection: barLayoutSection,
     barEntryIndexOfOccurrence: barEntryIndexOfOccurrence,
     railReferencedIds: railReferencedIds,
-    pruneRailGhosts: pruneRailGhosts
+    pruneRailGhosts: pruneRailGhosts,
+    ensurePluginsEnabled: ensurePluginsEnabled
   }
 }
