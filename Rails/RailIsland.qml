@@ -289,6 +289,9 @@ PanelWindow {
         catcherScreen: root.screen
         visible: root.revealed && root.clickMode && root.catcherArmed
             && !(root.dragHost && root.dragHost.dragModeActive)
+            // Panel open → outside clicks belong to the panel's own
+            // dismissal, not the island (main-bar parity).
+            && !root.pinnedByPanel
     }
 
     // Duck-contract proxy over the main bar. Everything delegates to innerBar

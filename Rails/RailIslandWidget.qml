@@ -34,7 +34,14 @@ Item {
     // Panel widgets expose opened/open()/close()
     readonly property bool panelOpen: {
         var it = widgetLoader.item
-        return !!it && it.opened === true
+        // Both official open-panel contracts, mirroring the main bar's
+        // ModuleSlot.panelOpen (activePopout === slot.activeItem):
+        //  - Ui.Panel-derived widgets expose `opened`
+        //  - BarWidget-based widgets with a self-contained KeyboardPanel /
+        //    PopupCard call bar.requestPopout(owner) → bar.activePopout
+        //    points at the widget root while open.
+        return !!it && (it.opened === true
+            || (barObj !== null && barObj.activePopout === it))
     }
     readonly property alias activeItem: widgetLoader.item
     // 3.6 — this slot is being dragged (dimmed + outlined, like ModuleSlot)
