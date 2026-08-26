@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "BarModel.js" as BarModel
 import "RailModel.js" as RailModel
 import "Rails"
 
@@ -168,9 +169,74 @@ Item {
     function hideTooltip(target) { if (innerBar && typeof innerBar.hideTooltip === "function") return innerBar.hideTooltip(target) }
     function requestPopout(owner) { if (innerBar && typeof innerBar.requestPopout === "function") return innerBar.requestPopout(owner) }
     function releasePopout(owner) { if (innerBar && typeof innerBar.releasePopout === "function") return innerBar.releasePopout(owner) }
-    function summonBarWidget(id) { if (innerBar && typeof innerBar.summonBarWidget === "function") return innerBar.summonBarWidget(id); return false }
-    function hideBarWidget(id) { if (innerBar && typeof innerBar.hideBarWidget === "function") return innerBar.hideBarWidget(id); return false }
-    function isBarWidgetOpen(id) { if (innerBar && typeof innerBar.isBarWidgetOpen === "function") return innerBar.isBarWidgetOpen(id); return false }
+    // The host routes shell summon/toggle commands through these methods. The
+    // native Bar only knows its own ModuleSlots, so fall back to rail islands
+    // when a widget has been moved out of the main bar.
+    function railPanelCandidate(id) {
+        var wanted = String(id || "")
+        if (!wanted) return null
+
+        var candidates = []
+        for (var p = 0; p < railPanels.length; p++) {
+            var panel = railPanels[p]
+            if (!panel || !panel.islands) continue
+            var screenName = panel.screen ? String(panel.screen.name || "") : ""
+            for (var i = 0; i < panel.islands.length; i++) {
+                var island = panel.islands[i]
+                if (!island || !island.moduleSlots) continue
+                for (var s = 0; s < island.moduleSlots.length; s++) {
+                    var slot = island.moduleSlots[s]
+                    var item = slot ? slot.activeItem : null
+                    if (!slot || !item || slot.moduleName !== wanted) continue
+                    if (typeof item.open !== "function" || typeof item.close !== "function"
+                        || item.opened === undefined) continue
+                    candidates.push({
+                        panel: panel,
+                        slot: slot,
+                        screenName: screenName,
+                        opened: item.opened === true
+                    })
+                }
+            }
+        }
+
+        if (!candidates.length) return null
+        var focused = innerBar && typeof innerBar.focusedScreenName === "function"
+            ? innerBar.focusedScreenName() : ""
+        var chosenSlot = BarModel.pickPanelSlot(candidates, focused)
+        for (var c = 0; c < candidates.length; c++) {
+            if (candidates[c].slot === chosenSlot) return candidates[c]
+        }
+        return null
+    }
+
+    function summonBarWidget(id) {
+        if (innerBar && typeof innerBar.summonBarWidget === "function"
+            && innerBar.summonBarWidget(id)) return true
+
+        var candidate = railPanelCandidate(id)
+        if (!candidate) return false
+        candidate.panel.activeSection = candidate.slot.section
+        candidate.slot.activeItem.open()
+        return true
+    }
+
+    function hideBarWidget(id) {
+        if (innerBar && typeof innerBar.hideBarWidget === "function"
+            && innerBar.hideBarWidget(id)) return true
+
+        var candidate = railPanelCandidate(id)
+        if (!candidate) return false
+        candidate.slot.activeItem.close()
+        return true
+    }
+
+    function isBarWidgetOpen(id) {
+        if (innerBar && typeof innerBar.isBarWidgetOpen === "function"
+            && innerBar.isBarWidgetOpen(id)) return true
+        var candidate = railPanelCandidate(id)
+        return !!candidate && candidate.slot.activeItem.opened === true
+    }
     function toggleTransparency() { if (innerBar && typeof innerBar.toggleTransparency === "function") return innerBar.toggleTransparency() }
     function debugBarGeometry() { if (innerBar && typeof innerBar.debugBarGeometry === "function") return innerBar.debugBarGeometry(); return [] }
     function panelWidgetIdAt(region, index) { if (innerBar && typeof innerBar.panelWidgetIdAt === "function") return innerBar.panelWidgetIdAt(region, index); return "" }
