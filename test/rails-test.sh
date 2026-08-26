@@ -125,6 +125,7 @@ if (typeof normalizeFn === 'function') {
   let cfg = normalizeFn(undefined, 'top')
   assertEqual(cfg.rails.top.left.length, 0, 'normalize undefined -> zero-config empty rails')
   assertEqual(cfg.trigger, 'hover', 'normalize undefined -> default trigger hover')
+  assertEqual(rm.normalizeTrigger('click'), 'hover', 'click trigger is normalized to hover')
   assert(cfg.enabled === undefined, 'no enabled flag in output')
   // legacy explicit enabled:false is ignored entirely
   cfg = normalizeFn({ enabled: false, bottom: { left: [{ id: 'x' }] } }, 'top')

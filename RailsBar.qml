@@ -68,44 +68,9 @@ Item {
         railPanels = next
     }
 
-    // 3.7 — keep plugin bar-widgets registered while they live in rails (the
-    // core's isEnabled() only scans bar.layout/plugins/bar.id, so a rail
-    // placement alone reads as "disabled" and the core sweep drops them).
-    // Self-triggered: onRailsConfigChanged / onCfgSerialChanged / Timer /
-    // pluginRegistry signals inside the bridge — NO root handlers here (a
-    // second Component.onCompleted at this level kills the whole component).
-    RailPluginWidgetBridge {
-        id: pluginBridge
-        shell: innerBar && innerBar.shell ? innerBar.shell : null
-        railsConfig: root.normalizedRails
-        cfgSerial: root.barConfigSerial
-    }
-
-    property bool containerMoveActive: false
-    property string containerMoveSource: ""
-    property string containerMoveCandidate: ""
-    property var containerMoveWindow: null
-    property var containerMoveScreen: null
-
-    function beginContainerMove(edge, win) {
-        containerMoveWindow = win
-        containerMoveScreen = win && win.screen ? win.screen : null
-        containerMoveSource = edge
-        containerMoveCandidate = edge
-        containerMoveActive = true
-    }
-    function updateContainerMove(screenPoint) {
-        if (!containerMoveActive || !containerMoveScreen) return
-        containerMoveCandidate = RailModel.nearestScreenEdge(screenPoint, containerMoveScreen)
-    }
-    function clearContainerMove() {
-        containerMoveActive = false
-        containerMoveCandidate = ""
-        containerMoveWindow = null
-        containerMoveScreen = null
-        containerMoveSource = ""
-    }
-
+    // Moving the native bar to another edge swaps the rail contents at the two
+    // edges. This keeps each edge's widgets attached to the space they occupy;
+    // unlike the removed container gesture, this follows the native bar move.
     function swapRailConfigs(config, edgeA, edgeB) {
         if (!Util.isPlainObject(config.bar)) config.bar = {}
         if (!Util.isPlainObject(config.bar.rails)) config.bar.rails = {}
@@ -114,26 +79,6 @@ Item {
         var b = RailModel.normalizeRailLayout(rails[edgeB])
         rails[edgeA] = b
         rails[edgeB] = a
-    }
-
-    function finishContainerMove() {
-        var src = containerMoveSource
-        var cand = containerMoveCandidate
-        var active = containerMoveActive
-        clearContainerMove()
-        if (!active || !src || !cand || src === cand) return
-        if (!shell || typeof shell.mutateShellConfig !== "function") return
-
-        var mainPos = RailModel.normalizePosition(position)
-        if (src === mainPos) {
-            shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, mainPos, cand) })
-            if (innerBar && typeof innerBar.setBarPosition === "function") innerBar.setBarPosition(cand)
-        } else if (cand === mainPos) {
-            shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, src, mainPos) })
-            if (innerBar && typeof innerBar.setBarPosition === "function") innerBar.setBarPosition(src)
-        } else {
-            shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, src, cand) })
-        }
     }
 
     property string _barDragFrom: ""
@@ -152,6 +97,19 @@ Item {
                 root.shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, from, to) })
             }
         }
+    }
+
+    // 3.7 — keep plugin bar-widgets registered while they live in rails (the
+    // core's isEnabled() only scans bar.layout/plugins/bar.id, so a rail
+    // placement alone reads as "disabled" and the core sweep drops them).
+    // Self-triggered: onRailsConfigChanged / onCfgSerialChanged / Timer /
+    // pluginRegistry signals inside the bridge — NO root handlers here (a
+    // second Component.onCompleted at this level kills the whole component).
+    RailPluginWidgetBridge {
+        id: pluginBridge
+        shell: innerBar && innerBar.shell ? innerBar.shell : null
+        railsConfig: root.normalizedRails
+        cfgSerial: root.barConfigSerial
     }
 
     // Duck contract for shell.bar — aliases to innerBar (main)
@@ -372,94 +330,7 @@ Item {
                     fontFamily: innerBar.fontFamily
                 }
 
-                // Invisible reservers — Overlay Auto, full-span, keep main 0,0 full while resizing workspace
-                RailReserve {
-                    screen: screenDelegate.screen
-                    edge: "top"
-                    mainPosition: screenDelegate.mainPos
-                    thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.topHasWidgets
-                    barHidden: innerBar.barHidden
-                }
-
-                RailReserve {
-                    screen: screenDelegate.screen
-                    edge: "bottom"
-                    mainPosition: screenDelegate.mainPos
-                    thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.bottomHasWidgets
-                    barHidden: innerBar.barHidden
-                }
-
-                RailReserve {
-                    screen: screenDelegate.screen
-                    edge: "left"
-                    mainPosition: screenDelegate.mainPos
-                    thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.leftHasWidgets
-                    barHidden: innerBar.barHidden
-                }
-
-                RailReserve {
-                    screen: screenDelegate.screen
-                    edge: "right"
-                    mainPosition: screenDelegate.mainPos
-                    thickness: screenDelegate.thickness
-                    hasWidgets: screenDelegate.rightHasWidgets
-                    barHidden: innerBar.barHidden
-                }
             }
-        }
-    }
-
-    component RailMoveGhostPanel: PanelWindow {
-        id: ghostWindow
-        required property var ghostScreen
-        readonly property bool screenMatches: root.containerMoveScreen === ghostScreen ||
-            (root.containerMoveScreen && ghostScreen && root.containerMoveScreen.name && ghostScreen.name && root.containerMoveScreen.name === ghostScreen.name)
-        visible: root.containerMoveActive && screenMatches
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.namespace: "omarchy-rails-move-ghost"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-
-        mask: Region {}
-
-        Repeater {
-            model: ["top", "bottom", "left", "right"]
-
-            BorderSurface {
-                required property string modelData
-                readonly property bool edgeVertical: modelData === "left" || modelData === "right"
-                readonly property int edgeSize: RailModel.railThickness(innerBar.barSize)
-
-                x: modelData === "right" ? parent.width - edgeSize : 0
-                y: modelData === "bottom" ? parent.height - edgeSize : 0
-                width: edgeVertical ? edgeSize : parent.width
-                height: edgeVertical ? parent.height : edgeSize
-                color: innerBar.transparent ? "transparent" : innerBar.background
-                borderSpec: Border.flat(innerBar.foreground, 1)
-                visible: opacity > 0
-                opacity: root.containerMoveCandidate === modelData ? (innerBar.transparent ? 0.45 : 0.7) : 0
-
-                Behavior on opacity {
-                    NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                }
-            }
-        }
-    }
-    Variants {
-        model: Quickshell.screens
-        delegate: Component {
-            RailMoveGhostPanel { required property var modelData; ghostScreen: modelData }
         }
     }
 }

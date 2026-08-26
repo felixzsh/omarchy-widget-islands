@@ -8,8 +8,8 @@ function normalizePosition(value) {
 }
 
 function normalizeTrigger(value) {
-  var v = String(value || "").trim().toLowerCase()
-  return v === "click" ? "click" : "hover"
+  // Edge indicators are hover-only; keep old config values harmless.
+  return "hover"
 }
 
 function entryId(entry) {
