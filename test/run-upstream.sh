@@ -69,14 +69,14 @@ mkdir -p "$TMPDIR/shell/plugins/bar"
 # Required files (always exist) — Bar.qml verbatim upstream, never edited
 cp -f "$FRAME_ROOT/Bar.qml" "$TMPDIR/shell/plugins/bar/Bar.qml"
 cp -f "$FRAME_ROOT/BarModel.js" "$TMPDIR/shell/plugins/bar/BarModel.js"
-# Wrapper + rails model (entry point is RailsBar.qml, not Bar.qml)
-for f in RailsBar.qml RailModel.js RailPanel.qml RailHints.qml; do
+# Wrapper + islands model (entry point is WidgetIslandsBar.qml, not Bar.qml)
+for f in WidgetIslandsBar.qml IslandModel.js; do
   [[ -f "$FRAME_ROOT/$f" ]] && cp -f "$FRAME_ROOT/$f" "$TMPDIR/shell/plugins/bar/$f"
 done
-# Rails/ subdir if it exists (RailsBar.qml expects it at Rails/)
-if [[ -d "$FRAME_ROOT/Rails" ]]; then
-  mkdir -p "$TMPDIR/shell/plugins/bar/Rails"
-  cp -f "$FRAME_ROOT/Rails"/* "$TMPDIR/shell/plugins/bar/Rails/" 2>/dev/null || true
+# Islands/ subdir if it exists (WidgetIslandsBar.qml expects it at Islands/)
+if [[ -d "$FRAME_ROOT/Islands" ]]; then
+  mkdir -p "$TMPDIR/shell/plugins/bar/Islands"
+  cp -f "$FRAME_ROOT/Islands"/* "$TMPDIR/shell/plugins/bar/Islands/" 2>/dev/null || true
 fi
 # Widgets/indicators if touched in frame (keep upstream otherwise)
 if [[ -d "$FRAME_ROOT/widgets" ]]; then
@@ -127,7 +127,7 @@ for t in "${TESTS[@]}"; do
     candidate="$FRAME_ROOT/$t"
   fi
   if [[ ! -f "$candidate" ]]; then
-    # if the test does not exist upstream (e.g. local rails-test.sh), run it directly with ROOT=FRAME_ROOT
+    # if the test does not exist upstream (e.g. local islands-test.sh), run it directly with ROOT=FRAME_ROOT
     if [[ -f "$FRAME_ROOT/$t" ]]; then
       echo "==> $t (local, ROOT=$FRAME_ROOT)" >&2
       if ROOT="$FRAME_ROOT" OMARCHY_PATH="$FRAME_ROOT" bash "$FRAME_ROOT/$t"; then

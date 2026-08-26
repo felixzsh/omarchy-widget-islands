@@ -4,8 +4,8 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "BarModel.js" as BarModel
-import "RailModel.js" as RailModel
-import "Rails"
+import "IslandModel.js" as IslandModel
+import "Islands"
 
 Item {
     id: root
@@ -23,7 +23,7 @@ Item {
         transparent: false,
         centerAnchor: "omarchy.clock",
         layout: { left: [], center: [], right: [] },
-        rails: {
+        islands: {
             enabled: false,
             trigger: "hover",
             top: { left: [], center: [], right: [] },
@@ -33,11 +33,11 @@ Item {
         }
     })
 
-    // Rails state — parsed from bar.rails
-    property var normalizedRails: ({
+    // Islands state — parsed from bar.islands
+    property var normalizedIslands: ({
         enabled: false,
         trigger: "hover",
-        rails: {
+        islands: {
             top: { left: [], center: [], right: [] },
             bottom: { left: [], center: [], right: [] },
             left: { left: [], center: [], right: [] },
@@ -46,37 +46,37 @@ Item {
     })
     property int barConfigSerial: 0
 
-    // Cross-panel rail drag coordination. The panel that
-    // starts a rail widget drag publishes its edge + live cursor here; peer
+    // Cross-panel island drag coordination. The panel that
+    // starts an island widget drag publishes its edge + live cursor here; peer
     // panels compute their own island offers from it, and the source resolves
-    // claims across all railPanels at release.
+    // claims across all islandPanels at release.
     property string universalDragEdge: ""
     property real universalDragX: 0
     property real universalDragY: 0
-    property var railPanels: []
-    function registerRailPanel(p) {
+    property var islandPanels: []
+    function registerIslandPanel(p) {
         if (!p) return
-        var next = railPanels.slice()
+        var next = islandPanels.slice()
         if (next.indexOf(p) !== -1) return
         next.push(p)
-        railPanels = next
+        islandPanels = next
     }
-    function unregisterRailPanel(p) {
-        var next = railPanels.filter(function(t) { return t !== p })
-        if (next.length === railPanels.length) return
-        railPanels = next
+    function unregisterIslandPanel(p) {
+        var next = islandPanels.filter(function(t) { return t !== p })
+        if (next.length === islandPanels.length) return
+        islandPanels = next
     }
 
-    // Moving the native bar to another edge swaps the rail contents at the two
+    // Moving the native bar to another edge swaps the island contents at the two
     // edges, keeping each edge's widgets attached to the space they occupy.
-    function swapRailConfigs(config, edgeA, edgeB) {
+    function swapIslandConfigs(config, edgeA, edgeB) {
         if (!Util.isPlainObject(config.bar)) config.bar = {}
-        if (!Util.isPlainObject(config.bar.rails)) config.bar.rails = {}
-        var rails = config.bar.rails
-        var a = RailModel.normalizeRailLayout(rails[edgeA])
-        var b = RailModel.normalizeRailLayout(rails[edgeB])
-        rails[edgeA] = b
-        rails[edgeB] = a
+        if (!Util.isPlainObject(config.bar.islands)) config.bar.islands = {}
+        var islands = config.bar.islands
+        var a = IslandModel.normalizeIslandLayout(islands[edgeA])
+        var b = IslandModel.normalizeIslandLayout(islands[edgeB])
+        islands[edgeA] = b
+        islands[edgeB] = a
     }
 
     property string _barDragFrom: ""
@@ -90,23 +90,23 @@ Item {
             var from = root._barDragFrom
             root._barDragFrom = ""
             if (!from) return
-            var to = RailModel.normalizePosition(innerBar.barMoveCandidate || innerBar.position)
+            var to = IslandModel.normalizePosition(innerBar.barMoveCandidate || innerBar.position)
             if (to !== from && root.shell && typeof root.shell.mutateShellConfig === "function") {
-                root.shell.mutateShellConfig(function(config) { root.swapRailConfigs(config, from, to) })
+                root.shell.mutateShellConfig(function(config) { root.swapIslandConfigs(config, from, to) })
             }
         }
     }
 
-    // Keep plugin bar-widgets registered while they live in rails (the
-    // core's isEnabled() only scans bar.layout/plugins/bar.id, so a rail
+    // Keep plugin bar-widgets registered while they live in islands (the
+    // core's isEnabled() only scans bar.layout/plugins/bar.id, so an island
     // placement alone reads as "disabled" and the core sweep drops them).
-    // Self-triggered: onRailsConfigChanged / onCfgSerialChanged / Timer /
+    // Self-triggered: onIslandsConfigChanged / onCfgSerialChanged / Timer /
     // pluginRegistry signals inside the bridge — NO root handlers here (a
     // second Component.onCompleted at this level kills the whole component).
-    RailPluginWidgetBridge {
+    IslandPluginWidgetBridge {
         id: pluginBridge
         shell: innerBar && innerBar.shell ? innerBar.shell : null
-        railsConfig: root.normalizedRails
+        islandsConfig: root.normalizedIslands
         cfgSerial: root.barConfigSerial
     }
 
@@ -126,15 +126,15 @@ Item {
     function requestPopout(owner) { if (innerBar && typeof innerBar.requestPopout === "function") return innerBar.requestPopout(owner) }
     function releasePopout(owner) { if (innerBar && typeof innerBar.releasePopout === "function") return innerBar.releasePopout(owner) }
     // The host routes shell summon/toggle commands through these methods. The
-    // native Bar only knows its own ModuleSlots, so fall back to rail islands
+    // native Bar only knows its own ModuleSlots, so fall back to island islands
     // when a widget has been moved out of the main bar.
-    function railPanelCandidate(id) {
+    function islandPanelCandidate(id) {
         var wanted = String(id || "")
         if (!wanted) return null
 
         var candidates = []
-        for (var p = 0; p < railPanels.length; p++) {
-            var panel = railPanels[p]
+        for (var p = 0; p < islandPanels.length; p++) {
+            var panel = islandPanels[p]
             if (!panel || !panel.islands) continue
             var screenName = panel.screen ? String(panel.screen.name || "") : ""
             for (var i = 0; i < panel.islands.length; i++) {
@@ -170,7 +170,7 @@ Item {
         if (innerBar && typeof innerBar.summonBarWidget === "function"
             && innerBar.summonBarWidget(id)) return true
 
-        var candidate = railPanelCandidate(id)
+        var candidate = islandPanelCandidate(id)
         if (!candidate) return false
         candidate.panel.activeSection = candidate.slot.section
         candidate.slot.activeItem.open()
@@ -181,7 +181,7 @@ Item {
         if (innerBar && typeof innerBar.hideBarWidget === "function"
             && innerBar.hideBarWidget(id)) return true
 
-        var candidate = railPanelCandidate(id)
+        var candidate = islandPanelCandidate(id)
         if (!candidate) return false
         candidate.slot.activeItem.close()
         return true
@@ -190,7 +190,7 @@ Item {
     function isBarWidgetOpen(id) {
         if (innerBar && typeof innerBar.isBarWidgetOpen === "function"
             && innerBar.isBarWidgetOpen(id)) return true
-        var candidate = railPanelCandidate(id)
+        var candidate = islandPanelCandidate(id)
         return !!candidate && candidate.slot.activeItem.opened === true
     }
     function toggleTransparency() { if (innerBar && typeof innerBar.toggleTransparency === "function") return innerBar.toggleTransparency() }
@@ -200,21 +200,21 @@ Item {
     // Known issue: rapid bar.position switches can flicker through "top"
     // when shell.json is read mid atomic write — FileView sees an empty file
     // and shell/shell.qml:72 falls back to defaults for one frame. For the
-    // rails plugin this is visible as a gap/detach when flipping left↔right
+    // islands plugin this is visible as a gap/detach when flipping left↔right
     // quickly (see: https://github.com/basecamp/omarchy/pull/7723).
     function applyBarConfig() {
         var config = Util.isPlainObject(root.barConfig) ? root.barConfig : root.fallbackBarConfig
-        var railsRaw = config.rails
+        var islandsRaw = config.islands
         var pos = config.position
-        var parsed = RailModel.normalizeRailsConfig(railsRaw, pos)
-        normalizedRails = parsed
+        var parsed = IslandModel.normalizeIslandsConfig(islandsRaw, pos)
+        normalizedIslands = parsed
         barConfigSerial++
     }
 
     onBarConfigChanged: applyBarConfig()
     Component.onCompleted: applyBarConfig()
 
-    // Main bar — must be first so Hyprland arranges main before rails (invite)
+    // Main bar — must be first so Hyprland arranges main before islands (invite)
     Bar {
         id: innerBar
         omarchyPath: root.omarchyPath
@@ -224,7 +224,7 @@ Item {
         manifest: root.manifest
     }
 
-    // Rails — one panel for each edge other than the main bar's position.
+    // Islands — one panel for each edge other than the main bar's position.
     // React to barConfigSerial + innerBar.position for correct filtering.
     Variants {
         model: Quickshell.screens
@@ -236,22 +236,22 @@ Item {
                 readonly property var screen: modelData
 
                 // Compute thickness once per screen-delegate (reacts to barSize changes)
-                readonly property int thickness: RailModel.railThickness(innerBar.barSize)
+                readonly property int thickness: IslandModel.islandThickness(innerBar.barSize)
                 readonly property string mainPos: innerBar.position
                 readonly property int cfgSerial: root.barConfigSerial
                 // Keep cfgSerial dependency for hasWidgets
-                readonly property var _topLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["top"] : null)
-                readonly property var _bottomLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["bottom"] : null)
-                readonly property var _leftLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["left"] : null)
-                readonly property var _rightLayout: (cfgSerial, root.normalizedRails && root.normalizedRails.rails ? root.normalizedRails.rails["right"] : null)
-                readonly property bool topHasWidgets: _topLayout ? RailModel.hasAnyWidgets(_topLayout) : false
-                readonly property bool bottomHasWidgets: _bottomLayout ? RailModel.hasAnyWidgets(_bottomLayout) : false
-                readonly property bool leftHasWidgets: _leftLayout ? RailModel.hasAnyWidgets(_leftLayout) : false
-                readonly property bool rightHasWidgets: _rightLayout ? RailModel.hasAnyWidgets(_rightLayout) : false
+                readonly property var _topLayout: (cfgSerial, root.normalizedIslands && root.normalizedIslands.islands ? root.normalizedIslands.islands["top"] : null)
+                readonly property var _bottomLayout: (cfgSerial, root.normalizedIslands && root.normalizedIslands.islands ? root.normalizedIslands.islands["bottom"] : null)
+                readonly property var _leftLayout: (cfgSerial, root.normalizedIslands && root.normalizedIslands.islands ? root.normalizedIslands.islands["left"] : null)
+                readonly property var _rightLayout: (cfgSerial, root.normalizedIslands && root.normalizedIslands.islands ? root.normalizedIslands.islands["right"] : null)
+                readonly property bool topHasWidgets: _topLayout ? IslandModel.hasAnyWidgets(_topLayout) : false
+                readonly property bool bottomHasWidgets: _bottomLayout ? IslandModel.hasAnyWidgets(_bottomLayout) : false
+                readonly property bool leftHasWidgets: _leftLayout ? IslandModel.hasAnyWidgets(_leftLayout) : false
+                readonly property bool rightHasWidgets: _rightLayout ? IslandModel.hasAnyWidgets(_rightLayout) : false
 
                 // Edge markers remain available even when a section is empty;
                 // dots distinguish populated sections.
-                RailPanel {
+                IslandPanel {
                     screen: screenDelegate.screen
                     edge: "top"
                     mainPosition: screenDelegate.mainPos
@@ -261,7 +261,7 @@ Item {
                     hasWidgets: screenDelegate.topHasWidgets
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
-                    railLayout: screenDelegate._topLayout ? screenDelegate._topLayout : ({ left: [], center: [], right: [] })
+                    islandLayout: screenDelegate._topLayout ? screenDelegate._topLayout : ({ left: [], center: [], right: [] })
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
@@ -269,7 +269,7 @@ Item {
                     fontFamily: innerBar.fontFamily
                 }
 
-                RailPanel {
+                IslandPanel {
                     screen: screenDelegate.screen
                     edge: "bottom"
                     mainPosition: screenDelegate.mainPos
@@ -279,7 +279,7 @@ Item {
                     hasWidgets: screenDelegate.bottomHasWidgets
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
-                    railLayout: screenDelegate._bottomLayout ? screenDelegate._bottomLayout : ({ left: [], center: [], right: [] })
+                    islandLayout: screenDelegate._bottomLayout ? screenDelegate._bottomLayout : ({ left: [], center: [], right: [] })
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
@@ -287,7 +287,7 @@ Item {
                     fontFamily: innerBar.fontFamily
                 }
 
-                RailPanel {
+                IslandPanel {
                     screen: screenDelegate.screen
                     edge: "left"
                     mainPosition: screenDelegate.mainPos
@@ -297,7 +297,7 @@ Item {
                     hasWidgets: screenDelegate.leftHasWidgets
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
-                    railLayout: screenDelegate._leftLayout ? screenDelegate._leftLayout : ({ left: [], center: [], right: [] })
+                    islandLayout: screenDelegate._leftLayout ? screenDelegate._leftLayout : ({ left: [], center: [], right: [] })
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
@@ -305,7 +305,7 @@ Item {
                     fontFamily: innerBar.fontFamily
                 }
 
-                RailPanel {
+                IslandPanel {
                     screen: screenDelegate.screen
                     edge: "right"
                     mainPosition: screenDelegate.mainPos
@@ -315,7 +315,7 @@ Item {
                     hasWidgets: screenDelegate.rightHasWidgets
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
-                    railLayout: screenDelegate._rightLayout ? screenDelegate._rightLayout : ({ left: [], center: [], right: [] })
+                    islandLayout: screenDelegate._rightLayout ? screenDelegate._rightLayout : ({ left: [], center: [], right: [] })
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar

@@ -1,16 +1,16 @@
 import QtQuick
-import "../RailModel.js" as RailModel
+import "../IslandModel.js" as IslandModel
 
-// 3.7 — registration bridge for plugin bar-widgets hosted in rails.
+// Registration bridge for plugin bar-widgets hosted in islands.
 //
 // The shell core keeps a plugin's bar-widget registered only while its id is
 // reachable from config.bar.layout / config.plugins / bar.id — that is the
-// whole body of PluginRegistry.isEnabled(). A widget dragged into a rail
+// whole body of PluginRegistry.isEnabled(). A widget dragged into an island
 // leaves bar.layout, isEnabled() flips false, and syncPluginWidgets' sweep
 // unregisters it: islands keep counting dots but resolve component NULL.
 // Natives survive via __isFirstParty; third-party plugins need this bridge.
 //
-// We mirror shell.qml's loadPluginWidget cycle for rail-referenced plugin ids
+// We mirror shell.qml's loadPluginWidget cycle for island-referenced plugin ids
 // the core does not currently hold: async createComponent + register with the
 // same metadata shape. Safe against the core's sweep because it only drops
 // keys present in its internal pluginWidgetComponents map — ours are foreign.
@@ -21,15 +21,15 @@ Item {
 
     // Shell root — needs .barWidgetRegistry and .pluginRegistry
     required property var shell
-    // normalizedRails ({rails:{edge:{section:[entries]}}}) or the rails map itself
-    required property var railsConfig
+    // normalizedIslands ({islands:{edge:{section:[entries]}}}) or the islands map itself
+    required property var islandsConfig
     // Bump externally to force a resync after config mutations
     property int cfgSerial: 0
 
     // registryKey -> { url: string, component: Component|null }
     property var owned: ({})
 
-    onRailsConfigChanged: reconcile()
+    onIslandsConfigChanged: reconcile()
     onCfgSerialChanged: reconcile()
 
     // Plugin install/uninstall events arrive in a STORM (dozens of reload
@@ -71,9 +71,9 @@ Item {
         reconcile()
     }
 
-    function railIds() {
-        var rails = railsConfig && railsConfig.rails ? railsConfig.rails : railsConfig
-        return RailModel.railReferencedIds(rails)
+    function islandIds() {
+        var islands = islandsConfig && islandsConfig.islands ? islandsConfig.islands : islandsConfig
+        return IslandModel.islandReferencedIds(islands)
     }
 
     function setOwned(key, entry) {
@@ -118,9 +118,9 @@ Item {
         var plugins = shell && shell.pluginRegistry ? shell.pluginRegistry.installedPlugins : null
         if (!reg || !plugins) return
 
-        var wanted = railIds()
+        var wanted = islandIds()
 
-        // Release ours whose ids left the rails entirely.
+        // Release ours whose ids left the islands entirely.
         var nextOwned = {}
         for (var key in owned) {
             if (wanted.indexOf(key) !== -1) { nextOwned[key] = owned[key]; continue }
@@ -132,7 +132,7 @@ Item {
 
         // Services (dynamic data: live counters, trackers, daemons-with-state).
         // The host only starts a plugin's service while isEnabled() says so,
-        // and its placement scan doesn't know about rails — rail-hosted
+        // and its placement scan doesn't know about islands — island-hosted
         // widgets would render but feed on a service that never exists.
         // ensureService() is public and ungated; idempotent, so calling it
         // every sync (signals + 4s timer) keeps the service alive across the
@@ -140,7 +140,7 @@ Item {
         // even a destroy/recreate cycle loses nothing.
         //
         // UPSTREAM-PR(omarchy-core): teach PluginRegistry.findEntryLocation
-        // about config.bar.rails[edge][section] (mirror findBarLocation with
+        // about config.bar.islands[edge][section] (mirror findBarLocation with
         // barEntryId) and add the same pass to shell.updateEntryInline before
         // its plugins[] fallback — then this loop becomes redundant.
         for (var w = 0; w < wanted.length; w++) ensureServiceIfNeeded(wanted[w], plugins)
@@ -157,21 +157,21 @@ Item {
     }
 
     // One config write, after the storm settles. Ghosts = ids referenced in
-    // rails whose plugin is gone from disk AND absent from the widget
+    // islands whose plugin is gone from disk AND absent from the widget
     // registry (built-ins live in the registry, so never pruned). Mirrors the
     // host pruning bar.layout on plugin remove — its findEntryLocation can't
-    // see bar.rails, so without this the dead dot would linger forever.
-    // Teach the host's OWN enablement system about rail placements. The host
+    // see bar.islands, so without this the dead dot would linger forever.
+    // Teach the host's OWN enablement system about island placements. The host
     // treats a plugin as enabled when its id sits in bar.layout, plugins[],
-    // or bar.id — nothing knows bar.rails. Adding rail-hosted ids to
+    // or bar.id — nothing knows bar.islands. Adding island-hosted ids to
     // config.plugins (the host's native "enabled without a bar slot" list)
     // unlocks every lifecycle through the CORE: widget registration, service
     // sync, and the panel/overlay loader that summon/toggle route through
     // (isEnabled() gates all three).
     //
-    // The same single write also prunes rail entries that are no longer
+    // The same single write also prunes island entries that are no longer
     // host-enabled (uninstalled OR explicitly disabled) — main-bar parity,
-    // since the host's findEntryLocation can't see rails to clean them.
+    // since the host's findEntryLocation can't see islands to clean them.
     // The registry guard keeps bar-built-in widgets (omarchy.indicators,
     // keyboard-layout, ...) which live outside installedPlugins safe.
     function reconcile() {
@@ -181,11 +181,11 @@ Item {
         if (typeof shell.pluginRegistry.isEnabled !== "function") return
         if (typeof shell.mutateShellConfig !== "function") return
 
-        // Decision logic lives in RailModel.railReconcilePlan (pure, tested).
+        // Decision logic lives in IslandModel.islandReconcilePlan (pure, tested).
         // Note: ghost detection is installedPlugins-based on purpose — using
         // isEnabled() self-poisons via the config.plugins entries we add.
-        var plan = RailModel.railReconcilePlan(
-            railIds(),
+        var plan = IslandModel.islandReconcilePlan(
+            islandIds(),
             plugins,
             function(id) { return reg.has(id) },
             function(id) { return shell.pluginRegistry.isEnabled(id) })
@@ -194,13 +194,13 @@ Item {
         var addIds = plan.toEnable
         var dropIds = plan.ghosts
         shell.mutateShellConfig(function(config) {
-            var changed = RailModel.ensurePluginsEnabled(config, addIds)
-            changed = RailModel.pruneRailGhosts(config, dropIds) || changed
+            var changed = IslandModel.ensurePluginsEnabled(config, addIds)
+            changed = IslandModel.pruneIslandGhosts(config, dropIds) || changed
             // Stale plugins[] markers for uninstalled ids would keep
             // isEnabled() true forever and break reinstalls.
-            changed = RailModel.prunePluginsEnabled(config, dropIds) || changed
+            changed = IslandModel.prunePluginsEnabled(config, dropIds) || changed
             if (changed)
-                console.warn("[RAIL] reconciled rail plugins:",
+                console.warn("[RAIL] reconciled island plugins:",
                     "add=", addIds.length ? addIds.join(",") : "-",
                     "drop=", dropIds.length ? dropIds.join(",") : "-")
         })

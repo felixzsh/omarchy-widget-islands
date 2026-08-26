@@ -1,15 +1,15 @@
 import QtQuick
 import qs.Commons
 
-// RailHints — always-visible edge markers, one dot per widget in each section.
+// IslandHints — always-visible edge markers, one dot per widget in each section.
 // Hover state only brightens the marker; it does not control its visibility.
 Item {
     id: root
 
     required property string edge
     // Layout for this edge: {left:[], center:[], right:[]}
-    property var railLayout: ({ left: [], center: [], right: [] })
-    // Section under the pointer, set by RailPanel's HoverHandler
+    property var islandLayout: ({ left: [], center: [], right: [] })
+    // Section under the pointer, set by IslandPanel's HoverHandler
     property string hoveredSection: ""
     // Dot color — defaults to bar text, matches bar foreground on background.
     property color dotColor: Color.bar.text
@@ -19,11 +19,11 @@ Item {
 
     // Helper to get count per section
     function countFor(section) {
-        if (!railLayout || !railLayout[section] || !Array.isArray(railLayout[section])) return 0
-        return railLayout[section].length
+        if (!islandLayout || !islandLayout[section] || !Array.isArray(islandLayout[section])) return 0
+        return islandLayout[section].length
     }
 
-    // Horizontal rails (top/bottom): 3 columns side-by-side, dots in Row
+    // Horizontal islands (top/bottom): 3 columns side-by-side, dots in Row
     Row {
         id: horizontalThirds
         visible: root.isHorizontal
@@ -102,7 +102,7 @@ Item {
         }
     }
 
-    // Vertical rails (left/right): 3 rows stacked, dots in Column
+    // Vertical islands (left/right): 3 rows stacked, dots in Column
     Column {
         id: verticalThirds
         visible: !root.isHorizontal

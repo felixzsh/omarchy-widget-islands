@@ -3,7 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "../RailModel.js" as RailModel
+import "../IslandModel.js" as IslandModel
 
 // Floating HUD revealing one section's widgets as fully interactive modules.
 //
@@ -29,11 +29,11 @@ PanelWindow {
     required property color foregroundColor
     required property bool transparent
     required property string fontFamily
-    // Which section this island reveals + RailPanel drag API
+    // Which section this island reveals + IslandPanel drag API
     required property string section
     required property var dragHost
 
-    // Parked-window mode: the layer surface stays MAPPED for the rail's life;
+    // Parked-window mode: the layer surface stays MAPPED for the island's life;
     // revealing flips content + input mask (~one commit) instead of creating
     // surfaces. Mapping storms at bar-drag start stalled the native bar's own
     // ghost — same reason Bar.qml parks instead of unmapping (~150ms vs ~20ms).
@@ -55,7 +55,7 @@ PanelWindow {
     }
     signal closeRequested()
 
-    // Self-register into the RailPanel's islands list (Variants can't be
+    // Self-register into the IslandPanel's islands list (Variants can't be
     // enumerated from outside; the drag machinery and dismissal timer need
     // to iterate live islands).
     Component.onCompleted: if (dragHost && dragHost.registerIsland) dragHost.registerIsland(root)
@@ -91,7 +91,7 @@ PanelWindow {
         height: tab.height
     })
 
-    // Hosted widget slots, registered by RailIslandWidget so the drag
+    // Hosted widget slots, registered by IslandWidget so the drag
     // machinery can collect drop candidates across all revealed islands.
     property var moduleSlots: []
     function registerModuleSlot(s) {
@@ -113,7 +113,7 @@ PanelWindow {
 
     visible: false
     exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.namespace: "omarchy-rails-island-" + edge
+    WlrLayershell.namespace: "omarchy-widget-island-" + edge
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     color: "transparent"
@@ -163,9 +163,9 @@ PanelWindow {
     mask: Region { item: root.revealed ? tab : null }
 
     // Duck-contract shim handed to hosted widgets: mirrors innerBar except
-    // position/vertical, which reflect THIS rail's edge.
-    RailBarShim {
-        id: railBar
+    // position/vertical, which reflect THIS island's edge.
+    IslandBarShim {
+        id: islandBar
         source: root.barApi
         edgeOverride: root.edge
         fallbackSize: root.barSize
@@ -189,9 +189,9 @@ PanelWindow {
             // container is hidden; duplicating widgets would double-register
             // drag slots).
             model: root.horizontal ? root.entries : []
-            delegate: RailIslandWidget {
+            delegate: IslandWidget {
                 registry: root.registry
-                barObj: railBar
+                barObj: islandBar
                 edge: root.edge
                 host: root
                 dragHost: root.dragHost
@@ -208,9 +208,9 @@ PanelWindow {
 
         Repeater {
             model: !root.horizontal ? root.entries : []
-            delegate: RailIslandWidget {
+            delegate: IslandWidget {
                 registry: root.registry
-                barObj: railBar
+                barObj: islandBar
                 edge: root.edge
                 host: root
                 dragHost: root.dragHost
@@ -236,9 +236,9 @@ PanelWindow {
     }
 
     // Duck-contract proxy over the main bar. Everything delegates to innerBar
-    // except position/vertical, which reflect this rail's edge so summoned
-    // panels (KeyboardPanel reads bar.position) land next to the rail.
-    component RailBarShim: QtObject {
+    // except position/vertical, which reflect this island's edge so summoned
+    // panels (KeyboardPanel reads bar.position) land next to the island.
+    component IslandBarShim: QtObject {
         required property var source
         property string edgeOverride: "top"
         property int fallbackSize: 26

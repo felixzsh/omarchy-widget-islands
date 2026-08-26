@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "id": "felixzsh.rails",
-  "name": "Bar with Rails",
+  "id": "felixzsh.widget-islands",
+  "name": "Widget Islands",
   "version": "1.0.2",
   "author": "felixzsh",
-  "description": "Main bar plus 3 overlay rails",
+  "description": "Native bar with floating widget islands",
   "kinds": [
     "bar"
   ],
   "entryPoints": {
-    "bar": "RailsBar.qml"
+    "bar": "WidgetIslandsBar.qml"
   }
 }

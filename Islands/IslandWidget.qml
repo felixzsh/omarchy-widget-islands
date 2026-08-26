@@ -1,15 +1,15 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "../RailModel.js" as RailModel
+import "../IslandModel.js" as IslandModel
 
-// 3.5 — one hosted native widget inside a RailIsland. Mirrors Bar.qml
+// One hosted native widget inside an island. Mirrors Bar.qml
 // ModuleSlot essentials: registry component lookup + bar/moduleName/settings
 // injection on load. Exposes panelOpen + the accent marker (outer edge,
 // same semantics as the main bar's open-panel indicator).
 //
-// 3.6 — also mirrors ModuleSlot's modulePointer: an overlay MouseArea that
-// forwards clicks to the widget's triggerPress() and starts a rail widget
+// Also mirrors ModuleSlot's modulePointer: an overlay MouseArea that forwards
+// clicks to the widget's triggerPress() and starts an island widget
 // drag once the pointer moves past the threshold with the button held.
 Item {
     id: slot
@@ -17,15 +17,15 @@ Item {
     required property var modelData
     required property var registry
     required property string edge
-    // Duck-contract shim (position/vertical reflect the rail edge)
+    // Duck-contract shim (position/vertical reflect the island edge)
     required property var barObj
-    // 3.6 — owning island + RailPanel drag API
+    // Owning island + IslandPanel drag API
     required property var host
     required property var dragHost
     required property string section
 
-    readonly property string moduleName: RailModel.entryId(modelData)
-    readonly property var moduleSettings: RailModel.entrySettings(modelData)
+    readonly property string moduleName: IslandModel.entryId(modelData)
+    readonly property var moduleSettings: IslandModel.entrySettings(modelData)
     readonly property string canonicalName: Util.canonicalWidgetId(moduleName)
     readonly property var registryComponent: {
         var w = registry && registry.widgets
@@ -44,8 +44,8 @@ Item {
             || (barObj !== null && barObj.activePopout === it))
     }
     readonly property alias activeItem: widgetLoader.item
-    // 3.6 — this slot is being dragged (dimmed + outlined, like ModuleSlot)
-    readonly property bool isDragSource: dragHost !== null && dragHost.railDragSourceSlot === slot
+    // This slot is being dragged (dimmed + outlined, like ModuleSlot)
+    readonly property bool isDragSource: dragHost !== null && dragHost.islandDragSourceSlot === slot
 
     width: implicitWidth
     height: implicitHeight
@@ -61,7 +61,7 @@ Item {
     }
     Component.onDestruction: {
         if (host) host.unregisterModuleSlot(slot)
-        if (isDragSource && dragHost) dragHost.clearRailDrag()
+        if (isDragSource && dragHost) dragHost.clearIslandDrag()
     }
 
     Loader {
@@ -96,22 +96,22 @@ Item {
     // desktop), mirroring the main bar's openPanelIndicator semantics.
     Rectangle {
         readonly property int inset: Style.space(2)
-        readonly property bool horizontalRail: slot.edge === "top" || slot.edge === "bottom"
+        readonly property bool horizontalIsland: slot.edge === "top" || slot.edge === "bottom"
 
         visible: opacity > 0
         opacity: slot.panelOpen && !slot.isDragSource ? 0.9 : 0
         color: Color.accent
         radius: Math.min(width, height) / 2
-        width: horizontalRail
+        width: horizontalIsland
             ? Math.max(Style.space(10), Math.round(parent.width * 0.55))
             : Style.space(2)
-        height: horizontalRail
+        height: horizontalIsland
             ? Style.space(2)
             : Math.max(Style.space(10), Math.round(parent.height * 0.55))
-        x: !horizontalRail
+        x: !horizontalIsland
             ? (slot.edge === "left" ? parent.width - width - inset : inset)
             : Math.round((parent.width - width) / 2)
-        y: horizontalRail
+        y: horizontalIsland
             ? (slot.edge === "top" ? parent.height - height - inset : inset)
             : Math.round((parent.height - height) / 2)
         z: 50
@@ -123,7 +123,7 @@ Item {
 
     // Clicks + drag initiation, mirroring Bar.qml's modulePointer. The overlay
     // consumes presses; plain clicks are forwarded to triggerPress() so panels
-    // open exactly as before, and hold+move hands off to the RailPanel drag.
+    // open exactly as before, and hold+move hands off to the IslandPanel drag.
     MouseArea {
         id: modulePointer
 
@@ -131,7 +131,7 @@ Item {
         property bool suppressClick: false
         property real pressedX: 0
         property real pressedY: 0
-        readonly property bool canReorder: slot.dragHost !== null && slot.dragHost.canMutateRail
+        readonly property bool canReorder: slot.dragHost !== null && slot.dragHost.canMutateIsland
         readonly property real dragThreshold: Style.space(4)
 
         anchors.fill: parent
@@ -144,7 +144,7 @@ Item {
             suppressClick = false
             pressedX = mouse.x
             pressedY = mouse.y
-            if (slot.dragHost) slot.dragHost.clearRailDrag()
+            if (slot.dragHost) slot.dragHost.clearIslandDrag()
         }
 
         onPositionChanged: function(mouse) {
@@ -153,13 +153,13 @@ Item {
             var distance = Math.abs(mouse.x - pressedX) + Math.abs(mouse.y - pressedY)
             if (distance >= dragThreshold) {
                 if (!dragging && slot.dragHost)
-                    slot.dragHost.beginRailDrag(slot, pressedX, pressedY)
+                    slot.dragHost.beginIslandDrag(slot, pressedX, pressedY)
                 dragging = true
             }
 
             if (dragging && slot.dragHost) {
                 var scenePoint = mapToItem(null, mouse.x, mouse.y)
-                slot.dragHost.updateRailDrag(slot, scenePoint)
+                slot.dragHost.updateIslandDrag(slot, scenePoint)
             }
         }
 
@@ -169,7 +169,7 @@ Item {
             dragging = false
 
             if (wasDragging && slot.dragHost) {
-                slot.dragHost.finishRailDrag()
+                slot.dragHost.finishIslandDrag()
                 mouse.accepted = true
             } else if (!wasDragging) {
                 mouse.accepted = false
@@ -179,7 +179,7 @@ Item {
         onCanceled: {
             dragging = false
             suppressClick = false
-            if (slot.dragHost) slot.dragHost.clearRailDrag()
+            if (slot.dragHost) slot.dragHost.clearIslandDrag()
         }
 
         onClicked: function(mouse) {

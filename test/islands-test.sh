@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# rails-test.sh — Rails-specific tests (not upstream).
-# Validates RailModel.js when present.
-# Run with:  test/rails-test.sh   or   test/run-upstream.sh test/rails-test.sh
+# islands-test.sh — Islands-specific tests (not upstream).
+# Validates IslandModel.js when present.
+# Run with:  test/islands-test.sh   or   test/run-upstream.sh test/islands-test.sh
 
 set -euo pipefail
 
@@ -53,38 +53,38 @@ JS_PRELUDE
   export ROOT
 fi
 
-# If RailModel.js does not exist yet, skip informatively
-for check in "$FRAME_ROOT/RailModel.js" "$ROOT/shell/plugins/bar/RailModel.js"; do
+# If IslandModel.js does not exist yet, skip informatively
+for check in "$FRAME_ROOT/IslandModel.js" "$ROOT/shell/plugins/bar/IslandModel.js"; do
   if [[ -f "$check" ]]; then found=1; break; fi
 done
 if [[ -z "${found:-}" ]]; then
-  pass "RailModel.js does not exist yet — skip rails-test (MVP pending)"
+  pass "IslandModel.js does not exist yet — skip islands-test"
   exit 0
 fi
 
 run_node_test <<'JS'
 const fs = require('fs')
 
-// Resolve RailModel from rails or overlay
-let railPath = null
+// Resolve IslandModel from islands or overlay
+let islandPath = null
 for (const cand of [
-  path.join(process.env.ROOT, 'shell/plugins/bar/RailModel.js'),
-  path.join(process.env.ROOT, '../omarchy-frame/RailModel.js'),
-  path.join(path.join(process.env.ROOT || '', '../omarchy-frame/RailModel.js')),
+  path.join(process.env.ROOT, 'shell/plugins/bar/IslandModel.js'),
+  path.join(process.env.ROOT, '../omarchy-frame/IslandModel.js'),
+  path.join(path.join(process.env.ROOT || '', '../omarchy-frame/IslandModel.js')),
 ]) {
-  if (fs.existsSync(cand)) { railPath = cand; break }
+  if (fs.existsSync(cand)) { islandPath = cand; break }
 }
-if (!railPath) {
-  const alt = path.join(process.env.ROOT || '', 'RailModel.js')
-  if (fs.existsSync(alt)) railPath = alt
+if (!islandPath) {
+  const alt = path.join(process.env.ROOT || '', 'IslandModel.js')
+  if (fs.existsSync(alt)) islandPath = alt
 }
-if (!railPath) {
-  console.log('ok - RailModel.js not found, skip')
+if (!islandPath) {
+  console.log('ok - IslandModel.js not found, skip')
   process.exit(0)
 }
 
-const src = fs.readFileSync(railPath, 'utf8')
-// RailModel is plain JS (no pragma), evaluate in vm
+const src = fs.readFileSync(islandPath, 'utf8')
+// IslandModel is plain JS (no pragma), evaluate in vm
 const vm = require('vm')
 const ctx = { module: { exports: {} }, exports: {}, console }
 vm.createContext(ctx)
@@ -92,17 +92,17 @@ const clean = src.replace(/^\s*\.pragma library\s*\n/m, '')
 vm.runInContext(clean, ctx)
 const rm = ctx.module.exports || ctx
 
-const normalizeFn = rm.normalizeRailsConfig
-if (typeof rm.railThickness !== 'function' && typeof normalizeFn !== 'function') {
-  console.log('ok - RailModel has no testable API yet (WIP)')
+const normalizeFn = rm.normalizeIslandsConfig
+if (typeof rm.islandThickness !== 'function' && typeof normalizeFn !== 'function') {
+  console.log('ok - IslandModel has no testable API yet (WIP)')
   process.exit(0)
 }
 
-// --- Concrete tests (enabled when you implement RailModel) ---
-if (typeof rm.railThickness === 'function') {
-  assertEqual(rm.railThickness(26), 9, 'railThickness 26 -> ~9 (1/3)')
-  assertEqual(rm.railThickness(28), 9, 'railThickness 28 -> ~9 (1/3)')
-  assert(rm.railThickness(6) >= 4, 'railThickness clamps to minimum 4')
+// --- Concrete tests (enabled when you implement IslandModel) ---
+if (typeof rm.islandThickness === 'function') {
+  assertEqual(rm.islandThickness(26), 9, 'islandThickness 26 -> ~9 (1/3)')
+  assertEqual(rm.islandThickness(28), 9, 'islandThickness 28 -> ~9 (1/3)')
+  assert(rm.islandThickness(6) >= 4, 'islandThickness clamps to minimum 4')
 }
 
 if (typeof rm.isPinned === 'function' && typeof rm.setPinned === 'function') {
@@ -123,20 +123,20 @@ if (typeof normalizeFn === 'function') {
   }
   if (!bar) { console.log('ok - BarModel not found, skip normalize checks'); } else {
   let cfg = normalizeFn(undefined, 'top')
-  assertEqual(cfg.rails.top.left.length, 0, 'normalize undefined -> zero-config empty rails')
+  assertEqual(cfg.islands.top.left.length, 0, 'normalize undefined -> zero-config empty islands')
   assertEqual(cfg.trigger, 'hover', 'normalize undefined -> default trigger hover')
   assertEqual(rm.normalizeTrigger('click'), 'hover', 'click trigger is normalized to hover')
   assert(cfg.enabled === undefined, 'no enabled flag in output')
   // legacy explicit enabled:false is ignored entirely
   cfg = normalizeFn({ enabled: false, bottom: { left: [{ id: 'x' }] } }, 'top')
-  assertEqual(cfg.rails.bottom.left[0].id, 'x', 'legacy enabled:false ignored')
+  assertEqual(cfg.islands.bottom.left[0].id, 'x', 'legacy enabled:false ignored')
   cfg = normalizeFn({ top: { left: [{ id: 'omarchy.tray' }] } }, 'top')
-  assertEqual(cfg.rails.top.left[0].id, 'omarchy.tray', 'bar.rails direct top.left')
+  assertEqual(cfg.islands.top.left[0].id, 'omarchy.tray', 'bar.islands direct top.left')
   // inline pinned preserved
   cfg = normalizeFn({ bottom: { right: [{ id: 'omarchy.audio', pinned: true }] } }, 'top')
-  let entry = cfg.rails.bottom.right[0]
-  assertEqual(entry.id, 'omarchy.audio', 'rails preserves id')
-  assertEqual(entry.pinned, true, 'rails preserves pinned:true')
+  let entry = cfg.islands.bottom.right[0]
+  assertEqual(entry.id, 'omarchy.audio', 'islands preserves id')
+  assertEqual(entry.pinned, true, 'islands preserves pinned:true')
   // dots per section: hasAnyWidgets and sectionHasWidgets (if present)
   if (typeof rm.hasAnyWidgets === 'function') {
     assertEqual(rm.hasAnyWidgets({ left: [{id:'a'}], center: [], right: [] }), true, 'hasAnyWidgets true if any section has widgets')
@@ -147,101 +147,101 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.sectionHasWidgets({ left: [{id:'a'}], center: [], right: [] }, 'center'), false, 'sectionHasWidgets center false')
   }
 
-  // 3.6 — moveRailEntry (intra-rail drag & drop persistence)
+  // moveIslandEntry (intra-island drag & drop persistence)
   function freshConfig() {
-    return { bar: { rails: { bottom: {
+    return { bar: { islands: { bottom: {
       left: [{id:'a'}, {id:'b'}, {id:'c'}],
       center: [{id:'x'}],
       right: []
     } } } }
   }
-  if (rm.moveRailEntry) {
+  if (rm.moveIslandEntry) {
     // same-section reorder forward
     let c = freshConfig()
-    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'a', 'left', 'c'), true, 'move a before c')
-    let ids = c.bar.rails.bottom.left.map(e => e.id).join(',')
+    assertEqual(rm.moveIslandEntry(c, 'bottom', 'left', 'a', 'left', 'c'), true, 'move a before c')
+    let ids = c.bar.islands.bottom.left.map(e => e.id).join(',')
     assertEqual(ids, 'b,a,c', 'left order after move a before c')
     // same-section no-op (b before c == already there)
     c = freshConfig()
-    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'b', 'left', 'c'), false, 'move b before c is identity')
-    ids = c.bar.rails.bottom.left.map(e => e.id).join(',')
+    assertEqual(rm.moveIslandEntry(c, 'bottom', 'left', 'b', 'left', 'c'), false, 'move b before c is identity')
+    ids = c.bar.islands.bottom.left.map(e => e.id).join(',')
     assertEqual(ids, 'a,b,c', 'identity leaves order untouched')
     // same-section real swap
     c = freshConfig()
-    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'b', 'left', 'a'), true, 'move b before a swaps')
-    assertEqual(c.bar.rails.bottom.left.map(e => e.id).join(','), 'b,a,c', 'swap applied')
+    assertEqual(rm.moveIslandEntry(c, 'bottom', 'left', 'b', 'left', 'a'), true, 'move b before a swaps')
+    assertEqual(c.bar.islands.bottom.left.map(e => e.id).join(','), 'b,a,c', 'swap applied')
     // cross-section before target
     c = freshConfig()
-    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'a', 'center', 'x'), true, 'move a to center before x')
-    assertEqual(c.bar.rails.bottom.left.map(e => e.id).join(','), 'b,c', 'source section loses a')
-    assertEqual(c.bar.rails.bottom.center.map(e => e.id).join(','), 'a,x', 'center gains a before x')
+    assertEqual(rm.moveIslandEntry(c, 'bottom', 'left', 'a', 'center', 'x'), true, 'move a to center before x')
+    assertEqual(c.bar.islands.bottom.left.map(e => e.id).join(','), 'b,c', 'source section loses a')
+    assertEqual(c.bar.islands.bottom.center.map(e => e.id).join(','), 'a,x', 'center gains a before x')
     // cross-section append (beforeName empty)
     c = freshConfig()
-    rm.moveRailEntry(c, 'bottom', 'left', 'b', 'right', '')
-    assertEqual(c.bar.rails.bottom.right.map(e => e.id).join(','), 'b', 'append to empty right')
+    rm.moveIslandEntry(c, 'bottom', 'left', 'b', 'right', '')
+    assertEqual(c.bar.islands.bottom.right.map(e => e.id).join(','), 'b', 'append to empty right')
     // drop after last target → append semantics
     c = freshConfig()
-    rm.moveRailEntry(c, 'bottom', 'center', 'x', 'left', '')
-    assertEqual(c.bar.rails.bottom.left.map(e => e.id).join(','), 'a,b,c,x', 'x appended to left end')
+    rm.moveIslandEntry(c, 'bottom', 'center', 'x', 'left', '')
+    assertEqual(c.bar.islands.bottom.left.map(e => e.id).join(','), 'a,b,c,x', 'x appended to left end')
     // missing widget → false
     c = freshConfig()
-    assertEqual(rm.moveRailEntry(c, 'bottom', 'left', 'zz', 'center', ''), false, 'missing id returns false')
+    assertEqual(rm.moveIslandEntry(c, 'bottom', 'left', 'zz', 'center', ''), false, 'missing id returns false')
   }
-  if (rm.moveBarEntryToRail) {
-    // bar layout → rail section, before target
+  if (rm.moveBarEntryToIsland) {
+    // bar layout → island section, before target
     let c2 = { bar: { position: 'top', layout: { left: [{id:'tray'},{id:'net'}] },
-      rails: { bottom: { left: [], center: [{id:'x'}], right: [] } } } }
-    assertEqual(rm.moveBarEntryToRail(c2, 'net', 'left', 'bottom', 'center', 0, false), true, 'bar->rail before x')
+      islands: { bottom: { left: [], center: [{id:'x'}], right: [] } } } }
+    assertEqual(rm.moveBarEntryToIsland(c2, 'net', 'left', 'bottom', 'center', 0, false), true, 'bar->island before x')
     assertEqual(c2.bar.layout.left.map(e => e.id).join(','), 'tray', 'bar layout loses net')
-    assertEqual(c2.bar.rails.bottom.center.map(e => e.id).join(','), 'net,x', 'rail center gains net before x')
-    // append to empty rail section (targetIndex -1)
-    c2 = { bar: { layout: { center: [{id:'clock'}] }, rails: { top: { left: [], center: [], right: [] } } } }
-    assertEqual(rm.moveBarEntryToRail(c2, 'clock', 'center', 'top', 'right', -1, false), true, 'bar->rail append empty')
-    assertEqual(c2.bar.rails.top.right.map(e => e.id).join(','), 'clock', 'empty right gains clock')
+    assertEqual(c2.bar.islands.bottom.center.map(e => e.id).join(','), 'net,x', 'island center gains net before x')
+    // append to empty island section (targetIndex -1)
+    c2 = { bar: { layout: { center: [{id:'clock'}] }, islands: { top: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.moveBarEntryToIsland(c2, 'clock', 'center', 'top', 'right', -1, false), true, 'bar->island append empty')
+    assertEqual(c2.bar.islands.top.right.map(e => e.id).join(','), 'clock', 'empty right gains clock')
     // after=true inserts past target
-    c2 = { bar: { layout: { right: [{id:'a'}] }, rails: { left: { left: [{id:'p'},{id:'q'}], center: [], right: [] } } } }
-    rm.moveBarEntryToRail(c2, 'a', 'right', 'left', 'left', 0, true)
-    assertEqual(c2.bar.rails.left.left.map(e => e.id).join(','), 'p,a,q', 'after=true lands past p')
+    c2 = { bar: { layout: { right: [{id:'a'}] }, islands: { left: { left: [{id:'p'},{id:'q'}], center: [], right: [] } } } }
+    rm.moveBarEntryToIsland(c2, 'a', 'right', 'left', 'left', 0, true)
+    assertEqual(c2.bar.islands.left.left.map(e => e.id).join(','), 'p,a,q', 'after=true lands past p')
     // preserves entry object shape
-    c2 = { bar: { layout: { left: [{id:'aud', pinned: true}] }, rails: { bottom: { left: [], center: [], right: [] } } } }
-    rm.moveBarEntryToRail(c2, 'aud', 'left', 'bottom', 'center', -1, false)
-    assertEqual(c2.bar.rails.bottom.center[0].pinned, true, 'entry object preserved')
+    c2 = { bar: { layout: { left: [{id:'aud', pinned: true}] }, islands: { bottom: { left: [], center: [], right: [] } } } }
+    rm.moveBarEntryToIsland(c2, 'aud', 'left', 'bottom', 'center', -1, false)
+    assertEqual(c2.bar.islands.bottom.center[0].pinned, true, 'entry object preserved')
     // missing id
-    assertEqual(rm.moveBarEntryToRail({bar:{layout:{left:[]},rails:{}}}, 'nope', 'left', 'top', 'left', -1, false), false, 'bar->rail missing id false')
+    assertEqual(rm.moveBarEntryToIsland({bar:{layout:{left:[]},islands:{}}}, 'nope', 'left', 'top', 'left', -1, false), false, 'bar->island missing id false')
   }
-  if (rm.railReferencedIds) {
+  if (rm.islandReferencedIds) {
     let r = { bottom: { left: [{id:'a'}], center: [{id:'b'},'c'], right: [] },
               left:  { left: [], center: ['a'], right: [{id:'d'}] },
               top: { left: [], center: [], right: [] },
               right: { left: [], center: [], right: [] } }
-    let ids = rm.railReferencedIds(r)
-    assertEqual(ids.length, 4, 'railReferencedIds dedupes across edges')
+    let ids = rm.islandReferencedIds(r)
+    assertEqual(ids.length, 4, 'islandReferencedIds dedupes across edges')
     for (const want of ['a','b','c','d']) assert(ids.indexOf(want) !== -1, 'contains ' + want)
-    assertEqual(rm.railReferencedIds({}).length, 0, 'empty rails -> empty ids')
-    assertEqual(rm.railReferencedIds(null).length, 0, 'null rails -> empty ids')
+    assertEqual(rm.islandReferencedIds({}).length, 0, 'empty islands -> empty ids')
+    assertEqual(rm.islandReferencedIds(null).length, 0, 'null islands -> empty ids')
   }
-  if (rm.pruneRailGhosts) {
-    let g1 = { bar: { rails: {
+  if (rm.pruneIslandGhosts) {
+    let g1 = { bar: { islands: {
       bottom: { left: [{id:'ghost1'}, {id:'alive'}], center: ['ghost2'], right: [] },
       top: { left: [], center: [], right: [] },
       left: { left: [], center: [], right: [] },
       right: { left: [{id:'ghost1'}], center: [{id:'kept'}], right: [] } } } }
-    assertEqual(rm.pruneRailGhosts(g1, ['ghost1', 'ghost2']), true, 'prune returns changed')
-    assertEqual(g1.bar.rails.bottom.left.map(e => e.id).join(','), 'alive', 'mixed section keeps alive')
-    assertEqual(g1.bar.rails.bottom.center.length, 0, 'string ghost removed')
-    assertEqual(g1.bar.rails.right.left.length, 0, 'same ghost across edges removed')
-    assertEqual(g1.bar.rails.right.center[0].id, 'kept', 'unlisted kept')
-    assertEqual(rm.pruneRailGhosts(g1, ['ghost1', 'ghost2']), false, 'second prune no-op')
-    let g2 = { bar: { rails: { bottom: { left: [{id:'omarchy.indicators'}], center: [], right: [] },
+    assertEqual(rm.pruneIslandGhosts(g1, ['ghost1', 'ghost2']), true, 'prune returns changed')
+    assertEqual(g1.bar.islands.bottom.left.map(e => e.id).join(','), 'alive', 'mixed section keeps alive')
+    assertEqual(g1.bar.islands.bottom.center.length, 0, 'string ghost removed')
+    assertEqual(g1.bar.islands.right.left.length, 0, 'same ghost across edges removed')
+    assertEqual(g1.bar.islands.right.center[0].id, 'kept', 'unlisted kept')
+    assertEqual(rm.pruneIslandGhosts(g1, ['ghost1', 'ghost2']), false, 'second prune no-op')
+    let g2 = { bar: { islands: { bottom: { left: [{id:'omarchy.indicators'}], center: [], right: [] },
       top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
       right: { left: [], center: [], right: [] } } } }
-    assertEqual(rm.pruneRailGhosts(g2, ['ghost1']), false, 'built-in-like id untouched when not listed')
-    let g3 = { bar: { rails: { bottom: { left: [{id:'gone', pinned:true}, {id:'stay', format:'x'}], center: [], right: [] },
+    assertEqual(rm.pruneIslandGhosts(g2, ['ghost1']), false, 'built-in-like id untouched when not listed')
+    let g3 = { bar: { islands: { bottom: { left: [{id:'gone', pinned:true}, {id:'stay', format:'x'}], center: [], right: [] },
       top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
       right: { left: [], center: [], right: [] } } } }
-    rm.pruneRailGhosts(g3, ['gone'])
-    assertEqual(g3.bar.rails.bottom.left.length, 1, 'only ghost removed')
-    assertEqual(g3.bar.rails.bottom.left[0].format, 'x', 'survivor settings intact')
+    rm.pruneIslandGhosts(g3, ['gone'])
+    assertEqual(g3.bar.islands.bottom.left.length, 1, 'only ghost removed')
+    assertEqual(g3.bar.islands.bottom.left[0].format, 'x', 'survivor settings intact')
   }
   if (rm.ensurePluginsEnabled) {
     let e1 = { version: 1 }
@@ -263,37 +263,37 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.ensurePluginsEnabled(null, ['x']), false, 'null config false')
     assertEqual(rm.ensurePluginsEnabled({}, []), false, 'empty ids false')
   }
-  if (rm.railReconcilePlan) {
+  if (rm.islandReconcilePlan) {
     // REGRESIÓN (el caso que rompió el fix anterior): plugin desinstalado
     // pero con su id aún en config.plugins → isEnabled() devuelve TRUE
     // (envenenado por la entrada fantasma). El plan debe PODARLO igual.
-    let p1 = rm.railReconcilePlan(
+    let p1 = rm.islandReconcilePlan(
       ['akshar.radio-atlas'],
       {},                                                    // no instalado
       function() { return false },                           // no en registry
       function() { return true })                            // isEnabled envenenado = true
     assertEqual(p1.ghosts.indexOf('akshar.radio-atlas') !== -1, true, 'REGRESSION: uninstalled-but-in-plugins[] still pruned')
     // instalado + no-enabled → toEnable
-    let p2 = rm.railReconcilePlan(['felixzsh.codexbar'],
+    let p2 = rm.islandReconcilePlan(['felixzsh.codexbar'],
       { 'felixzsh.codexbar': { id: 'felixzsh.codexbar' } },
       function() { return false },
       function() { return false })
     assertEqual(p2.toEnable.length, 1, 'installed not-enabled -> toEnable')
     assertEqual(p2.ghosts.length, 0, 'no ghosts for installed')
     // instalado + enabled → nada
-    let p3 = rm.railReconcilePlan(['felixzsh.codexbar'],
+    let p3 = rm.islandReconcilePlan(['felixzsh.codexbar'],
       { 'felixzsh.codexbar': {} },
       function() { return true },
       function() { return true })
     assertEqual(p3.toEnable.length + p3.ghosts.length, 0, 'installed enabled -> no-op')
     // built-in: no instalado pero SÍ en registry → nada
-    let p4 = rm.railReconcilePlan(['omarchy.indicators'],
+    let p4 = rm.islandReconcilePlan(['omarchy.indicators'],
       {},
       function(id) { return id === 'omarchy.indicators' },
       function() { return false })
     assertEqual(p4.ghosts.length, 0, 'built-in in registry never ghosted')
     // uninstalled sin registry → ghost
-    let p5 = rm.railReconcilePlan(['dead.plugin'],
+    let p5 = rm.islandReconcilePlan(['dead.plugin'],
       {},
       function() { return false },
       function() { return false })
@@ -308,47 +308,47 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.prunePluginsEnabled(pl1, ['nope']), false, 'no-op when absent')
     assertEqual(rm.prunePluginsEnabled({}, ['a']), false, 'missing list no-op')
   }
-  if (rm.moveRailEntryBetweenEdges) {
+  if (rm.moveIslandEntryBetweenEdges) {
     // left -> bottom, before target
-    let c3 = { bar: { rails: {
+    let c3 = { bar: { islands: {
       left:  { left: [{id:'n'}], center: [], right: [] },
       bottom:{ left: [{id:'x'},{id:'y'}], center: [], right: [] },
       top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] } } } }
-    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'bottom', 'left', 0, false), true, 'cross-edge before x')
-    assertEqual(c3.bar.rails.left.left.length, 0, 'source edge emptied')
-    assertEqual(c3.bar.rails.bottom.left.map(e=>e.id).join(','), 'n,x,y', 'dest order n,x,y')
+    assertEqual(rm.moveIslandEntryBetweenEdges(c3, 'left', 'left', 0, 'bottom', 'left', 0, false), true, 'cross-edge before x')
+    assertEqual(c3.bar.islands.left.left.length, 0, 'source edge emptied')
+    assertEqual(c3.bar.islands.bottom.left.map(e=>e.id).join(','), 'n,x,y', 'dest order n,x,y')
     // same-edge passthrough still identity-safe via generalized fn
-    c3 = { bar: { rails: {
+    c3 = { bar: { islands: {
       left:  { left: [{id:'a'},{id:'b'}], center: [], right: [] },
       bottom:{ left: [], center: [], right: [] },
       top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] } } } }
-    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'left', 'left', 0, true), false, 'drop on self after == identity')
-    assertEqual(c3.bar.rails.left.left.map(e=>e.id).join(','), 'a,b', 'identity preserved')
+    assertEqual(rm.moveIslandEntryBetweenEdges(c3, 'left', 'left', 0, 'left', 'left', 0, true), false, 'drop on self after == identity')
+    assertEqual(c3.bar.islands.left.left.map(e=>e.id).join(','), 'a,b', 'identity preserved')
     // real swap: a after b
-    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'left', 'left', 1, true), true, 'a after b swaps')
-    assertEqual(c3.bar.rails.left.left.map(e=>e.id).join(','), 'b,a', 'swap applied')
+    assertEqual(rm.moveIslandEntryBetweenEdges(c3, 'left', 'left', 0, 'left', 'left', 1, true), true, 'a after b swaps')
+    assertEqual(c3.bar.islands.left.left.map(e=>e.id).join(','), 'b,a', 'swap applied')
     // append to empty section on other edge (fresh source state)
-    c3 = { bar: { rails: {
+    c3 = { bar: { islands: {
       left:  { left: [{id:'a'}], center: [], right: [] },
       bottom:{ left: [], center: [], right: [] },
       top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] } } } }
-    rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 0, 'right', 'center', -1, false)
-    assertEqual(c3.bar.rails.right.center.map(e=>e.id).join(','), 'a', 'cross-edge append empty')
+    rm.moveIslandEntryBetweenEdges(c3, 'left', 'left', 0, 'right', 'center', -1, false)
+    assertEqual(c3.bar.islands.right.center.map(e=>e.id).join(','), 'a', 'cross-edge append empty')
     // bad index
-    assertEqual(rm.moveRailEntryBetweenEdges(c3, 'left', 'left', 9, 'top', 'left', -1, false), false, 'bad fromIndex false')
+    assertEqual(rm.moveIslandEntryBetweenEdges(c3, 'left', 'left', 9, 'top', 'left', -1, false), false, 'bad fromIndex false')
   }
-  if (rm.moveRailEntryToBarAt) {
-    let c4 = { bar: { layout: { left: [{id:'L1'}] }, rails: { bottom: { left: [{id:'r1'},{id:'r2'}], center: [], right: [] },
+  if (rm.moveIslandEntryToBarAt) {
+    let c4 = { bar: { layout: { left: [{id:'L1'}] }, islands: { bottom: { left: [{id:'r1'},{id:'r2'}], center: [], right: [] },
       top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] } } } }
-    assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 1, 'left', 1), true, 'rail->bar insert middle')
-    assertEqual(c4.bar.rails.bottom.left.map(e=>e.id).join(','), 'r1', 'rail lost r2')
+    assertEqual(rm.moveIslandEntryToBarAt(c4, 'bottom', 'left', 1, 'left', 1), true, 'island->bar insert middle')
+    assertEqual(c4.bar.islands.bottom.left.map(e=>e.id).join(','), 'r1', 'island lost r2')
     assertEqual(c4.bar.layout.left.map(e=>e.id).join(','), 'L1,r2', 'bar gains r2 at index 1')
     // append when index out of range
-    assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 0, 'right', 7), true, 'overflow index appends')
+    assertEqual(rm.moveIslandEntryToBarAt(c4, 'bottom', 'left', 0, 'right', 7), true, 'overflow index appends')
     let right = c4.bar.layout.right || []
     assertEqual(right.map(e=>e.id).join(','), 'r1', 'appended to right')
     // bad fromIndex
-    assertEqual(rm.moveRailEntryToBarAt(c4, 'bottom', 'left', 5, 'left', 0), false, 'bad rail index false')
+    assertEqual(rm.moveIslandEntryToBarAt(c4, 'bottom', 'left', 5, 'left', 0), false, 'bad island index false')
   }
   if (rm.barEntryIndexOfOccurrence) {
     const arr = [{id:'a'},'b',{id:'a'},{id:'c'}]
@@ -358,50 +358,50 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.barEntryIndexOfOccurrence(arr,'b',0),1,'string entry b')
     assertEqual(rm.barEntryIndexOfOccurrence(arr,'zz',0),-1,'missing name')
     // integrado: insertar después del SEGUNDO 'a' cae en su posición exacta
-    let c5 = { bar: { layout: { center: [{id:'a'},'b',{id:'a'}] }, rails: {
+    let c5 = { bar: { layout: { center: [{id:'a'},'b',{id:'a'}] }, islands: {
       bottom: { left: [{id:'r'}], center: [], right: [] },
       top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] },
       left: { left: [], center: [], right: [] } } } }
     const ent = rm.barLayoutSection(c5, 'center')
     const idx = rm.barEntryIndexOfOccurrence(ent, 'a', 1)
-    rm.moveRailEntryToBarAt(c5, 'bottom', 'left', 0, 'center', idx + 1)
+    rm.moveIslandEntryToBarAt(c5, 'bottom', 'left', 0, 'center', idx + 1)
     assertEqual(ent.map(e => typeof e === 'string' ? e : e.id).join(','), 'a,b,a,r', 'lands after second a')
-    assertEqual(c5.bar.rails.bottom.left.length, 0, 'rail emptied')
+    assertEqual(c5.bar.islands.bottom.left.length, 0, 'island emptied')
   }
-  if (rm.moveRailEntryAt) {
+  if (rm.moveIslandEntryAt) {
     // REGRESSION: duplicate ids made name-based drops land on the wrong one.
     // left=[cb,net,a,a], drag net(idx1) after first a(idx2) → [cb,a,net,a]
-    c = { bar: { rails: { top: {
+    c = { bar: { islands: { top: {
       left: [{id:'cb'}, {id:'net'}, {id:'a'}, {id:'a'}],
       center: [], right: []
     } } } }
-    assertEqual(rm.moveRailEntryAt(c, 'top', 'left', 1, 'left', 2, true), true,
-      'moveRailEntryAt net after first duplicate audio')
-    ids = c.bar.rails.top.left.map(e => e.id).join(',')
+    assertEqual(rm.moveIslandEntryAt(c, 'top', 'left', 1, 'left', 2, true), true,
+      'moveIslandEntryAt net after first duplicate audio')
+    ids = c.bar.islands.top.left.map(e => e.id).join(',')
     assertEqual(ids, 'cb,a,net,a', 'duplicate-id one-step move lands between the two')
     // before variant: drag a(idx3) before net(idx1) → [cb,a,net,a] identity? no:
-    c = { bar: { rails: { top: {
+    c = { bar: { islands: { top: {
       left: [{id:'x'}, {id:'m'}, {id:'n'}], center: [], right: []
     } } } }
-    assertEqual(rm.moveRailEntryAt(c, 'top', 'left', 2, 'left', 0, false), true, 'before idx0')
-    assertEqual(c.bar.rails.top.left.map(e => e.id).join(','), 'n,x,m', 'insert at head shifts')
+    assertEqual(rm.moveIslandEntryAt(c, 'top', 'left', 2, 'left', 0, false), true, 'before idx0')
+    assertEqual(c.bar.islands.top.left.map(e => e.id).join(','), 'n,x,m', 'insert at head shifts')
     // onto itself → identity
     c = freshConfig()
-    assertEqual(rm.moveRailEntryAt(c, 'bottom', 'left', 0, 'left', 0, true), false, 'self target identity')
-    assertEqual(c.bar.rails.bottom.left.length, 3, 'identity keeps entries')
+    assertEqual(rm.moveIslandEntryAt(c, 'bottom', 'left', 0, 'left', 0, true), false, 'self target identity')
+    assertEqual(c.bar.islands.bottom.left.length, 3, 'identity keeps entries')
     // append to empty section via placeholder (targetIndex -1)
-    c = { bar: { rails: { bottom: {
+    c = { bar: { islands: { bottom: {
       left: [{id:'a'}], center: [], right: []
     } } } }
-    assertEqual(rm.moveRailEntryAt(c, 'bottom', 'left', 0, 'right', -1, false), true, 'placeholder append to empty right')
-    assertEqual(c.bar.rails.bottom.right[0].id, 'a', 'empty section gains entry')
+    assertEqual(rm.moveIslandEntryAt(c, 'bottom', 'left', 0, 'right', -1, false), true, 'placeholder append to empty right')
+    assertEqual(c.bar.islands.bottom.right[0].id, 'a', 'empty section gains entry')
     // out-of-range source index
     c = freshConfig()
-    assertEqual(rm.moveRailEntryAt(c, 'bottom', 'left', 9, 'center', 0, false), false, 'bad fromIndex rejected')
+    assertEqual(rm.moveIslandEntryAt(c, 'bottom', 'left', 9, 'center', 0, false), false, 'bad fromIndex rejected')
   }
   }
 }
 
 JS
 
-pass "rails model"
+pass "islands model"
