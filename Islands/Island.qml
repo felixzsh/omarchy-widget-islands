@@ -154,7 +154,7 @@ PanelWindow {
         BorderSurface {
             anchors.fill: parent
             color: "transparent"
-            borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border, Color.popups.border, Math.max(1, Style.space(2)))
+            borderSpec: Border.flat(root.foregroundColor, 1)
             radius: parent.radius
         }
     }
