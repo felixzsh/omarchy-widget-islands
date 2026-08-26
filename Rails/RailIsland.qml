@@ -91,7 +91,7 @@ PanelWindow {
         height: tab.height
     })
 
-    // 3.6 — hosted widget slots, registered by RailIslandWidget so the drag
+    // Hosted widget slots, registered by RailIslandWidget so the drag
     // machinery can collect drop candidates across all revealed islands.
     property var moduleSlots: []
     function registerModuleSlot(s) {
@@ -219,7 +219,7 @@ PanelWindow {
         }
     }
 
-    // 3.7 — insertion line for the active drop target, painted by the OWNING
+    // Insertion line for the active drop target, painted by the OWNING
     // island (same-layer Overlay stacking across windows is map-order
     // dependent; inside one window z-order is deterministic).
     Rectangle {

@@ -46,7 +46,7 @@ Item {
     })
     property int barConfigSerial: 0
 
-    // 3.7 universal — cross-panel rail drag coordination. The panel that
+    // Cross-panel rail drag coordination. The panel that
     // starts a rail widget drag publishes its edge + live cursor here; peer
     // panels compute their own island offers from it, and the source resolves
     // claims across all railPanels at release.
@@ -68,8 +68,7 @@ Item {
     }
 
     // Moving the native bar to another edge swaps the rail contents at the two
-    // edges. This keeps each edge's widgets attached to the space they occupy;
-    // unlike the removed container gesture, this follows the native bar move.
+    // edges, keeping each edge's widgets attached to the space they occupy.
     function swapRailConfigs(config, edgeA, edgeB) {
         if (!Util.isPlainObject(config.bar)) config.bar = {}
         if (!Util.isPlainObject(config.bar.rails)) config.bar.rails = {}
@@ -98,7 +97,7 @@ Item {
         }
     }
 
-    // 3.7 — keep plugin bar-widgets registered while they live in rails (the
+    // Keep plugin bar-widgets registered while they live in rails (the
     // core's isEnabled() only scans bar.layout/plugins/bar.id, so a rail
     // placement alone reads as "disabled" and the core sweep drops them).
     // Self-triggered: onRailsConfigChanged / onCfgSerialChanged / Timer /
@@ -225,8 +224,8 @@ Item {
         manifest: root.manifest
     }
 
-    // Rails — 3 per monitor (edge !== position), trapped between main and parallel
-    // React to barConfigSerial + innerBar.position for correct filtering
+    // Rails — one panel for each edge other than the main bar's position.
+    // React to barConfigSerial + innerBar.position for correct filtering.
     Variants {
         model: Quickshell.screens
 
@@ -250,8 +249,8 @@ Item {
                 readonly property bool leftHasWidgets: _leftLayout ? RailModel.hasAnyWidgets(_leftLayout) : false
                 readonly property bool rightHasWidgets: _rightLayout ? RailModel.hasAnyWidgets(_rightLayout) : false
 
-                // Visual frame — Top Ignore, trapped only laterals, parallel full-span
-                // Ponytail: always visible when not main, even if empty (dots will differentiate later)
+                // Edge markers remain available even when a section is empty;
+                // dots distinguish populated sections.
                 RailPanel {
                     screen: screenDelegate.screen
                     edge: "top"

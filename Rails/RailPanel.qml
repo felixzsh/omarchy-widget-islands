@@ -17,7 +17,7 @@ PanelWindow {
     property int thickness: 8
     property int barSize: 26
     property bool barHidden: false
-    // Whether this rail has widgets (for future dots — not used for visibility)
+    // Whether this rail has widgets; markers remain visible for empty rails too.
     property bool hasWidgets: true
     // Colors from innerBar
     property color backgroundColor: Color.bar.background
@@ -29,30 +29,30 @@ PanelWindow {
     property var moveHost: null
     // Section under the pointer (left/center/right), fed by railHover
     property string hoveredSection: ""
-    // 3.5 — host-injected for island widgets
+    // Host-injected API for island widgets.
     property var barApi: null
     property var widgetRegistry: null
     property string fontFamily: ""
-    // 3.5 — the section whose island is currently revealed ("" = none)
+    // The section whose island is currently revealed ("" = none).
     property string activeSection: ""
 
     function sectionHasEntries(section) {
         return RailModel.sectionHasWidgets(railLayout, section)
     }
 
-    // 3.7 universal — register so the source panel can resolve peer claims
+    // Register so the source panel can resolve peer claims
     // at release and so RailsBar can coordinate drags across edges.
     Component.onCompleted: if (moveHost && moveHost.registerRailPanel) moveHost.registerRailPanel(railWindow)
     Component.onDestruction: if (moveHost && moveHost.unregisterRailPanel) moveHost.unregisterRailPanel(railWindow)
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
-    // Zero-config MVP: no enabled flag — visible while the plugin runs and
+    // No enabled flag is needed: the panel is visible while the plugin runs and
     // the main bar isn't hiding the frame (the bar toggle hides rails too).
     readonly property bool shouldShow: edge !== mainPosition && !barHidden
     onShouldShowChanged: if (!shouldShow) activeSection = ""
 
-    // 3.6 — intra-rail widget drag & drop state (mirrors Bar.qml's barDrag*)
+    // Intra-rail widget drag and drop state (mirrors Bar.qml's barDrag*).
     property var railDragSourceSlot: null
     property var railDragTargetSlot: null
     property bool railDragAfter: false
@@ -66,12 +66,12 @@ PanelWindow {
     readonly property bool canMutateRail: barApi !== null && barApi.shell !== null
         && typeof barApi.shell.mutateShellConfig === "function"
 
-    // 3.7 — universal DnD step 1: BAR → RAIL. While the native bar drags one
+    // BAR -> RAIL: while the native bar drags one
     // of ITS widgets, this rail reveals all islands and tracks the cursor to
     // offer drop targets. The bar's own intra-bar behavior is untouched; we
     // only observe public state (barDragSource/barDragScreenX/Y).
     readonly property bool barDragging: barApi !== null && barApi.barDragSource !== null
-    // 3.7 universal — another rail's widget is being dragged: reveal OUR
+    // Another rail's widget is being dragged: reveal OUR
     // islands too and offer drop targets when the cursor enters our zone.
     readonly property bool foreignRailDrag: moveHost !== null
         && moveHost.universalDragEdge !== "" && moveHost.universalDragEdge !== edge
@@ -85,7 +85,7 @@ PanelWindow {
     property bool barDropAfter: false
     property var barDropGeometry: null
 
-    // 3.7 universal — OUR rail drag hovering the NATIVE BAR strip (source
+    // OUR rail drag hovering the NATIVE BAR strip (source
     // panel only). Line is drawn by our ghost overlay, deterministic above
     // the bar's Top layer.
     property var railToBarTargetSlot: null
@@ -215,7 +215,7 @@ PanelWindow {
         updateIncomingOffers(sp.x, sp.y)
     }
 
-    // 3.7 universal — a RAIL-initiated drag from another edge hovering near us.
+    // A RAIL-initiated drag from another edge hovering near us.
     function updateForeignTarget() {
         if (!foreignRailDrag || !moveHost) return
         updateIncomingOffers(moveHost.universalDragX, moveHost.universalDragY)
@@ -269,7 +269,7 @@ PanelWindow {
         barDropGeometry = drop ? railDropMarkerRect(drop.slot, drop.after) : null
     }
 
-    // 3.7 — insertion line is painted INSIDE the owning island's window.
+    // The insertion line is painted INSIDE the owning island's window.
     // Islands and the ghost window share WlrLayer.Overlay and same-layer
     // stacking is map-order dependent (bar drags map everything at once →
     // line ended up under the tabs). Drawing locally is deterministic.
@@ -308,7 +308,7 @@ PanelWindow {
         })
     }
 
-    // 3.7 universal — react to the cross-panel drag coordinator (RailsBar).
+    // React to the cross-panel drag coordinator (RailsBar).
     Connections {
         target: railWindow.moveHost
         function onUniversalDragXChanged() { if (railWindow.foreignRailDrag) railWindow.updateForeignTarget() }
@@ -333,8 +333,8 @@ PanelWindow {
         function onBarDragScreenYChanged() { if (railWindow.barDragging) railWindow.updateBarDropTarget() }
     }
 
-    // 3.7 — acceptance zone: drops and empty-tab reveals only count while the
-    // dragged pointer sits at THIS rail's edge, inside the trapped span
+    // Acceptance zone: drops and empty-tab reveals only count while the
+    // dragged pointer sits at THIS rail's edge.
     // (+grace). Mirrors the native bar, which ignores releases outside its
     // window — without this, every release lands somewhere.
     readonly property int zoneGrace: Style.space(6)
@@ -477,7 +477,7 @@ PanelWindow {
         railDragAfter = drop ? drop.after : false
         railDragTargetGeometry = drop ? railDropMarkerRect(drop.slot, drop.after) : null
 
-        // 3.7 universal — outside our zone the native bar strip may offer a
+        // Outside our zone the native bar strip may offer a
         // landing spot (rail -> bar). Cleared automatically on each update.
         updateRailToBarTarget(railDragScreenX, railDragScreenY)
     }
@@ -507,7 +507,7 @@ PanelWindow {
         var homeTgt = railDragTargetSlot
         var homeAfter = railDragAfter
 
-        // 3.7 universal — cross-surface claims, mutually exclusive by geometry:
+        // Cross-surface claims, mutually exclusive by geometry:
         // a peer panel's island offer (rail -> other rail) or our own native-
         // bar strip target (rail -> bar).
         var peer = null
@@ -766,7 +766,7 @@ PanelWindow {
         }
     }
 
-    // 3.6 — drag feedback overlay (mirrors Bar.qml's DragGhostPanel): the
+    // Drag feedback overlay (mirrors Bar.qml's DragGhostPanel): the
     // grabbed widget follows the cursor and an accent line marks where it
     // would land. Visual-only: empty input region keeps the pointer grab with
     // the MouseArea that started the drag.

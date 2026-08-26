@@ -1,14 +1,14 @@
 # omarchy-rails
 
-A frame of **rails** around your Omarchy workspace. Your main bar stays exactly as it is — the rails are three thin strips on the remaining screen edges where any widget can live.
+A set of floating **rails** around your Omarchy workspace. Your main bar stays exactly as it is; widgets moved to a rail appear in an interactive HUD attached to one of the other screen edges.
 
 **The whole idea in one flow:** you install widgets/plugins → they land in the main bar (as always) → you drag them into a rail. That's it. You never touch `shell.json`.
 
 ## The flow
 
-1. **Install the plugin** — rails appear immediately as thin empty strips on the three edges not used by your main bar.
+1. **Install the plugin** — edge markers appear on the three edges not used by your main bar.
 2. **Install widgets/plugins normally** — everything lands in the main bar, exactly like without rails.
-3. **Drag anything from the bar into a rail** — while dragging, every rail reveals its drop zones; release and the widget lives there.
+3. **Drag anything from the bar into a rail** — while dragging, every rail reveals its drop zones; release and the widget lives in that edge's HUD.
 
 ```bash
 omarchy plugin add https://github.com/felixzsh/omarchy-rails --enable
@@ -19,7 +19,7 @@ From then on, reorder inside a rail, move widgets between rails, drag them back 
 ## Features
 
 - **Zero-config.** No `shell.json` section required. Rails exist while the plugin runs; sections are created automatically by your first drops.
-- **Islands on demand.** Each rail has 3 sections. Hover (or click, configurable) a section's zone and an island slides out of the strip showing its real, fully interactive widgets — not previews, the same components the main bar hosts.
+- **Islands on demand.** Each rail has 3 sections. Hover a section's marker and a floating island appears with its real, fully interactive widgets — not previews, the same components the main bar hosts.
 - **Full main-bar parity for hosted widgets.** Panels open adjacent to the island (summon adjacency), clicking another island widget swaps panels in one click, an accent mark shows which widget has its panel open. If it works in the bar, it works in the rail.
 - **Universal widget drag & drop.** Move widgets main bar ⇄ rails and between rails. A ghost follows the cursor, the source dims, and an accent line marks exactly where the widget will land — including between two islands. Empty sections show placeholder tabs during drags so they're droppable too.
 - **Third-party plugin friendly.** Non-native plugins keep working while hosted in rails: their widget components stay registered and their services stay alive, so dynamic-data plugins (live counters, trackers) keep ticking inside islands.
@@ -29,7 +29,7 @@ From then on, reorder inside a rail, move widgets between rails, drag them back 
 
 ## Configuration (optional)
 
-There is nothing to configure for the base experience. Islands currently reveal on hover:
+There is nothing to configure for the base experience. Islands reveal on hover:
 
 ```json
 {
@@ -41,4 +41,4 @@ There is nothing to configure for the base experience. Islands currently reveal 
 }
 ```
 
-The trigger is hover-only. The value `"click"` is accepted for old configurations but normalized to hover. Everything else — sections, per-edge layout — builds itself as you drag. Legacy keys like `"enabled"` are ignored: uninstalling/disabling the plugin removes the rails.
+The trigger is hover-only; other trigger values are normalized to hover. Sections and per-edge layout build themselves as you drag. Legacy keys like `"enabled"` are ignored: uninstalling or disabling the plugin removes the rails.
