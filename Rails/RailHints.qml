@@ -1,17 +1,14 @@
 import QtQuick
 import qs.Commons
 
-// RailHints — 3 thirds per rail, one dot per widget centered in each third.
-// Pure visual: hover state comes from RailPanel's HoverHandler via hoveredSection.
-// No MouseAreas here: the rail is all background, the single drag MouseArea in
-// RailPanel owns all input (mirrors the native bar's bg-drag MouseArea).
+// RailHints — always-visible edge markers, one dot per widget in each section.
+// Hover state only brightens the marker; it does not control its visibility.
 Item {
     id: root
 
     required property string edge
     // Layout for this edge: {left:[], center:[], right:[]}
     property var railLayout: ({ left: [], center: [], right: [] })
-    property string trigger: "hover"
     // Section under the pointer, set by RailPanel's HoverHandler
     property string hoveredSection: ""
     // Dot color — defaults to bar text, matches bar foreground on background.
@@ -47,9 +44,9 @@ Item {
                 Repeater {
                     model: hLeft.dotCount
                     Rectangle {
-                        width: 2; height: 2; radius: 1
+                        width: 4; height: 4; radius: 2
                         color: root.dotColor
-                        opacity: hLeft.hovered ? 0.6 : 0.35
+                        opacity: hLeft.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }
@@ -71,9 +68,9 @@ Item {
                 Repeater {
                     model: hCenter.dotCount
                     Rectangle {
-                        width: 2; height: 2; radius: 1
+                        width: 4; height: 4; radius: 2
                         color: root.dotColor
-                        opacity: hCenter.hovered ? 0.6 : 0.35
+                        opacity: hCenter.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }
@@ -95,9 +92,9 @@ Item {
                 Repeater {
                     model: hRight.dotCount
                     Rectangle {
-                        width: 2; height: 2; radius: 1
+                        width: 4; height: 4; radius: 2
                         color: root.dotColor
-                        opacity: hRight.hovered ? 0.6 : 0.35
+                        opacity: hRight.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }
@@ -125,9 +122,9 @@ Item {
                 Repeater {
                     model: vLeft.dotCount
                     Rectangle {
-                        width: 2; height: 2; radius: 1
+                        width: 4; height: 4; radius: 2
                         color: root.dotColor
-                        opacity: vLeft.hovered ? 0.6 : 0.35
+                        opacity: vLeft.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }
@@ -148,9 +145,9 @@ Item {
                 Repeater {
                     model: vCenter.dotCount
                     Rectangle {
-                        width: 2; height: 2; radius: 1
+                        width: 4; height: 4; radius: 2
                         color: root.dotColor
-                        opacity: vCenter.hovered ? 0.6 : 0.35
+                        opacity: vCenter.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }
@@ -171,9 +168,9 @@ Item {
                 Repeater {
                     model: vRight.dotCount
                     Rectangle {
-                        width: 2; height: 2; radius: 1
+                        width: 4; height: 4; radius: 2
                         color: root.dotColor
-                        opacity: vRight.hovered ? 0.6 : 0.35
+                        opacity: vRight.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
                 }

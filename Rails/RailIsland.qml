@@ -5,16 +5,11 @@ import qs.Commons
 import qs.Ui
 import "../RailModel.js" as RailModel
 
-// 3.5 experiment A — RailIsland: rectangular tab protruding out of the rail
-// edge, revealing one section's widgets as fully interactive native modules.
+// Floating HUD revealing one section's widgets as fully interactive modules.
 //
-// Window geometry mirrors the MAIN BAR (BarPanel): the surface spans the FULL
-// edge it lives on, flush with the screen corners. That is what makes summon
-// adjacency work — KeyboardPanel/PopupCard treat anchor-window-local coords as
-// screen coords (valid for the flush main bar, valid for us too), so panels
-// open aligned to the clicked widget exactly like from main. The visible tab
-// is painted inside at the active section's span, and `mask` limits input to
-// the tab so sibling sections stay interactive.
+// The HUD is drawn inside an edge-sized anchor surface. The surface keeps the
+// coordinate contract expected by KeyboardPanel while its background remains
+// transparent and only the detached HUD is masked for input.
 //
 // Overlay + Ignore only: never touches reserved, workspace never resizes.
 // Instant show/hide (no animation by design).
@@ -23,11 +18,8 @@ PanelWindow {
 
     required property var screen
     required property string edge
-    // Section center along the rail axis, as 0..1 fraction
+    // Section center along the screen axis, as 0..1 fraction
     required property real centerFrac
-    // Trapped span of the rail along its axis (between main and parallel)
-    required property int spanStart
-    required property int spanLen
     required property var entries
     required property var registry
     required property var barApi
@@ -37,10 +29,9 @@ PanelWindow {
     required property color foregroundColor
     required property bool transparent
     required property string fontFamily
-    // 3.6 — which section this island reveals + RailPanel drag API
+    // Which section this island reveals + RailPanel drag API
     required property string section
     required property var dragHost
-    property bool clickMode: false
 
     // Parked-window mode: the layer surface stays MAPPED for the rail's life;
     // revealing flips content + input mask (~one commit) instead of creating
@@ -70,30 +61,21 @@ PanelWindow {
     Component.onCompleted: if (dragHost && dragHost.registerIsland) dragHost.registerIsland(root)
     Component.onDestruction: if (dragHost && dragHost.unregisterIsland) dragHost.unregisterIsland(root)
 
-    // Tunables. totalDepth INCLUDES the strip overlap: rail third + protrusion
-    // == 85% of main bar thickness.
+    // Tunables for the floating HUD footprint.
     readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.85))
-    readonly property int depthOut: totalDepth - thickness
-    // Small end-padding so populated tabs hug their widgets: at append-to-end
-    // drops the indicator sits flush with the tab edge instead of leaving an
-    // empty trailing strip. Empty islands stay totalDepth-sized either way.
+    readonly property int hudGap: Style.space(3)
     readonly property int pad: Style.space(1)
 
-    // 3.6 — window origin in screen coords (full-edge span, flush corners).
-    // NOTE: the window's own width/height are NOT screen-sized on every edge
-    // (the bottom island is a thin horizontal strip, the right island a thin
-    // vertical one) — always derive from the SCREEN, never from this window.
+    // Actual screen origin for drag geometry and cross-window drop targets.
     function screenOrigin() {
         var sw = screen ? screen.width : 0
         var sh = screen ? screen.height : 0
-        var x = 0
-        var y = 0
-        if (edge === "bottom") y = sh - totalDepth
-        else if (edge === "right") x = sw - totalDepth
-        return { x: x, y: y }
+        return horizontal
+            ? { x: 0, y: edge === "bottom" ? sh - totalDepth - hudGap : hudGap }
+            : { x: edge === "right" ? sw - totalDepth - hudGap : hudGap, y: 0 }
     }
 
-    // Tab geometry in window-local coords.
+    // HUD geometry in window-local coords.
     function tabPoint() {
         var p = tab.mapToItem(null, 0, 0)
         return { x: p.x, y: p.y }
@@ -137,39 +119,47 @@ PanelWindow {
     color: "transparent"
     surfaceFormat.opaque: false
 
-    // Full-edge span, flush with the screen corners — main-bar contract.
-    implicitWidth: horizontal ? Math.round(screen ? screen.width : 0) : totalDepth
-    implicitHeight: horizontal ? totalDepth : Math.round(screen ? screen.height : 0)
+    implicitWidth: horizontal ? Math.round(screen ? screen.width : 0) : root.totalDepth
+    implicitHeight: horizontal ? root.totalDepth : Math.round(screen ? screen.height : 0)
 
     anchors {
-        top: edge === "top" || edge === "left" || edge === "right"
-        bottom: edge === "bottom" || edge === "left" || edge === "right"
-        left: edge === "top" || edge === "bottom" || edge === "left"
-        right: edge === "right"
+        top: root.edge === "top" || root.edge === "left" || root.edge === "right"
+        bottom: root.edge === "bottom" || root.edge === "left" || root.edge === "right"
+        left: root.edge === "top" || root.edge === "bottom" || root.edge === "left"
+        right: root.edge === "top" || root.edge === "bottom" || root.edge === "right"
     }
 
-    // The painted, interactive tab. Placed at the active section's span,
-    // flush against the rail strip.
+    margins {
+        top: root.edge === "top" ? root.hudGap : 0
+        bottom: root.edge === "bottom" ? root.hudGap : 0
+        left: root.edge === "left" ? root.hudGap : 0
+        right: root.edge === "right" ? root.hudGap : 0
+    }
+
+    // The painted, interactive floating HUD.
     Rectangle {
         id: tab
 
-        readonly property int crossPos: root.edge === "bottom" ? parent.height - height
-            : root.edge === "right" ? parent.width - width : 0
-
-        x: root.horizontal ? Math.max(root.spanStart, Math.min(
-              Math.round(root.spanStart + root.centerFrac * root.spanLen - width / 2),
-              root.spanStart + root.spanLen - width)) : crossPos
-        y: !root.horizontal ? Math.max(root.spanStart, Math.min(
-              Math.round(root.spanStart + root.centerFrac * root.spanLen - height / 2),
-              root.spanStart + root.spanLen - height)) : crossPos
+        x: root.horizontal ? Math.max(0, Math.min(
+              Math.round(root.centerFrac * parent.width - width / 2), parent.width - width)) : 0
+        y: !root.horizontal ? Math.max(0, Math.min(
+              Math.round(root.centerFrac * parent.height - height / 2), parent.height - height)) : 0
         width: root.horizontal ? root.length : root.totalDepth
         height: root.horizontal ? root.totalDepth : root.length
 
         color: root.backgroundColor
+        radius: Style.cornerRadius
         visible: root.revealed
+
+        BorderSurface {
+            anchors.fill: parent
+            color: "transparent"
+            borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.popups.border, Color.popups.border, Math.max(1, Style.space(2)))
+            radius: parent.radius
+        }
     }
 
-    // Input restricted to the tab while revealed; parked = fully click-through.
+    // Input restricted to the HUD while revealed; hidden = fully click-through.
     mask: Region { item: root.revealed ? tab : null }
 
     // Duck-contract shim handed to hosted widgets: mirrors innerBar except
@@ -243,55 +233,6 @@ PanelWindow {
         color: Color.accent
         radius: Math.min(width, height) / 2
         z: 100
-    }
-
-    component IslandCatcher: PanelWindow {
-        required property var catcherScreen
-        visible: false
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.namespace: "omarchy-rails-island-catcher"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        color: "transparent"
-        surfaceFormat.opaque: false
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-        MouseArea {
-            anchors.fill: parent
-            onPressed: function(mouse) {
-                mouse.accepted = true
-                root.closeRequested()
-            }
-        }
-    }
-
-    // Outside-click dismiss for click trigger. Armed a beat after the island
-    // maps so the catcher never lands above the island surface.
-    property bool catcherArmed: false
-    Timer {
-        id: catchArmTimer
-        interval: 80
-        onTriggered: root.catcherArmed = true
-    }
-    onVisibleChanged: {
-        if (visible) {
-            root.catcherArmed = false
-            catchArmTimer.restart()
-        } else {
-            root.catcherArmed = false
-        }
-    }
-    IslandCatcher {
-        catcherScreen: root.screen
-        visible: root.revealed && root.clickMode && root.catcherArmed
-            && !(root.dragHost && root.dragHost.dragModeActive)
-            // Panel open → outside clicks belong to the panel's own
-            // dismissal, not the island (main-bar parity).
-            && !root.pinnedByPanel
     }
 
     // Duck-contract proxy over the main bar. Everything delegates to innerBar

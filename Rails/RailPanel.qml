@@ -6,8 +6,7 @@ import qs.Ui
 import "../BarModel.js" as BarModel
 import "../RailModel.js" as RailModel
 
-// RailPanel — visual overlay (ponytail: no reservation, keeps main 0,0 full).
-// Only side rails are trapped; parallel stays full-span.
+// RailPanel — transparent edge indicator surface. Islands are floating HUDs.
 PanelWindow {
     id: railWindow
 
@@ -25,9 +24,8 @@ PanelWindow {
     property bool transparent: false
     // Hints data — per-edge layout for 3 thirds
     property var railLayout: ({ left: [], center: [], right: [] })
-    property string trigger: "hover"
     property color foregroundColor: Color.bar.text
-    // Container swap host (RailsBar root)
+    // Shared host for widget drag coordination (RailsBar root)
     property var moveHost: null
     // Section under the pointer (left/center/right), fed by railHover
     property string hoveredSection: ""
@@ -49,26 +47,10 @@ PanelWindow {
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
-    readonly property string opposite: {
-        if (mainPosition === "top") return "bottom"
-        if (mainPosition === "bottom") return "top"
-        if (mainPosition === "left") return "right"
-        return "left"
-    }
-    readonly property bool isParallel: edge === opposite
-    readonly property bool isSide: !isParallel && edge !== mainPosition
     // Zero-config MVP: no enabled flag — visible while the plugin runs and
     // the main bar isn't hiding the frame (the bar toggle hides rails too).
     readonly property bool shouldShow: edge !== mainPosition && !barHidden
     onShouldShowChanged: if (!shouldShow) activeSection = ""
-
-    // 3.5 — trapped span of this rail along its axis (between main and the
-    // parallel rail). Islands align their tab within THIS span so they sit
-    // centered over their section's dots instead of the raw screen edge.
-    readonly property int spanStart: isHorizontal ? margins.left : margins.top
-    readonly property int spanLen: isHorizontal
-        ? Math.max(0, Math.round((screen ? screen.width : 0) - margins.left - margins.right))
-        : Math.max(0, Math.round((screen ? screen.height : 0) - margins.top - margins.bottom))
 
     // 3.6 — intra-rail widget drag & drop state (mirrors Bar.qml's barDrag*)
     property var railDragSourceSlot: null
@@ -360,12 +342,10 @@ PanelWindow {
         var sw = screen ? screen.width : 0
         var sh = screen ? screen.height : 0
         var depth = Math.max(thickness + 2, Math.round(barSize * 0.85)) + zoneGrace
-        var start = spanStart - zoneGrace
-        var end = spanStart + spanLen + zoneGrace
-        if (pEdge === "top") return py <= depth && px >= start && px <= end
-        if (pEdge === "bottom") return py >= sh - depth && px >= start && px <= end
-        if (pEdge === "left") return px <= depth && py >= start && py <= end
-        return px >= sw - depth && py >= start && py <= end
+        if (pEdge === "top") return py <= depth && px >= -zoneGrace && px <= sw + zoneGrace
+        if (pEdge === "bottom") return py >= sh - depth && px >= -zoneGrace && px <= sw + zoneGrace
+        if (pEdge === "left") return px <= depth && py >= -zoneGrace && py <= sh + zoneGrace
+        return px >= sw - depth && py >= -zoneGrace && py <= sh + zoneGrace
     }
 
     function clearRailDrag() {
@@ -636,10 +616,10 @@ PanelWindow {
     WlrLayershell.namespace: "omarchy-rails-" + edge
     WlrLayershell.layer: WlrLayer.Top
 
-    color: transparent ? "transparent" : backgroundColor
+    color: "transparent"
     surfaceFormat.opaque: false
 
-    // Size: thickness along the exclusive edge
+    // Full-edge hover surface with no visible rail and no reservation.
     implicitWidth: isHorizontal ? 0 : thickness
     implicitHeight: isHorizontal ? thickness : 0
 
@@ -650,62 +630,11 @@ PanelWindow {
         right: edge === "right" || edge === "top" || edge === "bottom"
     }
 
-    // Trapped margins for side rails: inset between main and parallel
-    // Vertical side rails (left/right) need top/bottom margins
-    // Horizontal side rails (top/bottom) need left/right margins
     margins {
-        top: {
-            if (!isSide) return 0
-            // side is vertical (left/right)
-            if (edge === "left" || edge === "right") {
-                if (mainPosition === "top") return barSize
-                if (mainPosition === "bottom") return thickness
-            }
-            return 0
-        }
-        bottom: {
-            if (!isSide) return 0
-            if (edge === "left" || edge === "right") {
-                if (mainPosition === "top") return thickness
-                if (mainPosition === "bottom") return barSize
-            }
-            return 0
-        }
-        left: {
-            if (!isSide) return 0
-            if (edge === "top" || edge === "bottom") {
-                if (mainPosition === "left") return barSize
-                if (mainPosition === "right") return thickness
-            }
-            return 0
-        }
-        right: {
-            if (!isSide) return 0
-            if (edge === "top" || edge === "bottom") {
-                if (mainPosition === "left") return thickness
-                if (mainPosition === "right") return barSize
-            }
-            return 0
-        }
-    }
-
-    function windowScreenPoint(scenePoint) {
-        if (!screen) return scenePoint
-        var ox = 0, oy = 0
-        if (edge === "top") {
-            oy = 0
-            if (isSide) ox = mainPosition === "left" ? barSize : thickness
-        } else if (edge === "bottom") {
-            oy = screen.height - thickness
-            if (isSide) ox = mainPosition === "left" ? barSize : thickness
-        } else if (edge === "left") {
-            ox = 0
-            oy = mainPosition === "top" ? barSize : (mainPosition === "bottom" ? thickness : 0)
-        } else if (edge === "right") {
-            ox = screen.width - thickness
-            oy = mainPosition === "top" ? barSize : (mainPosition === "bottom" ? thickness : 0)
-        }
-        return { x: scenePoint.x + ox, y: scenePoint.y + oy }
+        top: 0
+        bottom: 0
+        left: 0
+        right: 0
     }
 
     ScreenMoveRemap {
@@ -718,7 +647,6 @@ PanelWindow {
         anchors.fill: parent
         edge: railWindow.edge
         railLayout: railWindow.railLayout
-        trigger: railWindow.trigger
         hoveredSection: railWindow.hoveredSection
         dotColor: railWindow.foregroundColor
     }
@@ -728,7 +656,7 @@ PanelWindow {
         onHoveredChanged: {
             if (!hovered) {
                 railWindow.hoveredSection = ""
-                if (railWindow.trigger === "hover") hoverCloseTimer.restart()
+                hoverCloseTimer.restart()
             } else {
                 hoverCloseTimer.stop()
             }
@@ -749,16 +677,14 @@ PanelWindow {
                 else sec = "right"
             }
             railWindow.hoveredSection = sec
-            // 3.5 — hover trigger: reveal the island for a dotful section
+            // Reveal the island for a dotful section on hover.
             // (frozen while a widget is being dragged)
             if (sec !== "" && !railWindow.dragModeActive
                 && sec !== railWindow.activeSection
                 && RailModel.sectionHasWidgets(railWindow.railLayout, sec)) {
                 console.warn("[RAIL]", railWindow.edge, "hover-activate:", sec)
-                if (railWindow.trigger === "hover") {
-                    railWindow.activeSection = sec
-                    hoverCloseTimer.stop()
-                }
+                railWindow.activeSection = sec
+                hoverCloseTimer.stop()
             }
         }
     }
@@ -811,8 +737,6 @@ PanelWindow {
                 edge: railWindow.edge
                 section: modelData
                 centerFrac: (["left", "center", "right"].indexOf(modelData) + 0.5) / 3
-                spanStart: railWindow.spanStart
-                spanLen: railWindow.spanLen
                 entries: railWindow.railLayout ? (railWindow.railLayout[modelData] || []) : []
                 registry: railWindow.widgetRegistry
                 barApi: railWindow.barApi
@@ -822,7 +746,6 @@ PanelWindow {
                 foregroundColor: railWindow.foregroundColor
                 transparent: railWindow.transparent
                 fontFamily: railWindow.fontFamily
-                clickMode: railWindow.trigger === "click"
                 dragHost: railWindow
                 // Parked windows: mapped whenever the rail exists; reveal
                 // logic lives inside the island (revealed property).
@@ -830,13 +753,13 @@ PanelWindow {
                 onCloseRequested: if (!railWindow.railDragActive) railWindow.activeSection = ""
                 onPointerInsideChanged: {
                     if (pointerInside) hoverCloseTimer.stop()
-                    else if (railWindow.trigger === "hover" && !railHover.hovered && !pinnedByPanel)
+                    else if (!railHover.hovered && !pinnedByPanel)
                         hoverCloseTimer.restart()
                 }
                 onPinnedByPanelChanged: {
                     // Panel closed → resume normal dismissal only if pointer is gone
                     if (pinnedByPanel) hoverCloseTimer.stop()
-                    else if (railWindow.trigger === "hover" && !railHover.hovered && !pointerInside)
+                    else if (!railHover.hovered && !pointerInside)
                         hoverCloseTimer.restart()
                 }
             }

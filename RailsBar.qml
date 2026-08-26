@@ -34,7 +34,6 @@ Item {
     })
 
     // Rails state — parsed from bar.rails
-    property string railsTrigger: "hover"
     property var normalizedRails: ({
         enabled: false,
         trigger: "hover",
@@ -209,7 +208,6 @@ Item {
         var railsRaw = config.rails
         var pos = config.position
         var parsed = RailModel.normalizeRailsConfig(railsRaw, pos)
-        railsTrigger = parsed.trigger
         normalizedRails = parsed
         barConfigSerial++
     }
@@ -265,7 +263,6 @@ Item {
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._topLayout ? screenDelegate._topLayout : ({ left: [], center: [], right: [] })
-                    trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
@@ -284,7 +281,6 @@ Item {
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._bottomLayout ? screenDelegate._bottomLayout : ({ left: [], center: [], right: [] })
-                    trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
@@ -303,7 +299,6 @@ Item {
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._leftLayout ? screenDelegate._leftLayout : ({ left: [], center: [], right: [] })
-                    trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
@@ -322,7 +317,6 @@ Item {
                     backgroundColor: innerBar.background
                     transparent: innerBar.transparent
                     railLayout: screenDelegate._rightLayout ? screenDelegate._rightLayout : ({ left: [], center: [], right: [] })
-                    trigger: root.railsTrigger
                     foregroundColor: innerBar.foreground
                     moveHost: root
                     barApi: innerBar
