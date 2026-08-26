@@ -63,7 +63,7 @@ PanelWindow {
 
     // Tunables for the floating HUD footprint.
     readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.85))
-    readonly property int hudGap: Style.space(3)
+    readonly property int hudGap: 0
     readonly property int pad: Style.space(1)
 
     // Actual screen origin for drag geometry and cross-window drop targets.
