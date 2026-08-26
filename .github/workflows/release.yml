@@ -39,14 +39,15 @@ jobs:
           FEATS=""
           FIXES=""
           REFACTORS=""
+          STYLES=""
 
           # %H = hash, %s = subject (first line)
           while IFS= read -r line; do
             [ -z "$line" ] && continue
             sha="${line%% *}"
             subject="${line#* }"
-            # match feat, fix, refactor (with optional scope and breaking !)
-            if echo "$subject" | grep -qE '^(feat|fix|refactor)(\([^)]+\))?!?: '; then
+            # match feat, fix, refactor, style (with optional scope and breaking !)
+            if echo "$subject" | grep -qE '^(feat|fix|refactor|style)(\([^)]+\))?!?: '; then
               type="$(echo "$subject" | sed -E 's/^([a-z]+)(\([^)]+\))?!?:.*/\1/')"
               # strip type prefix for display, keep rest as title
               title="$(echo "$subject" | sed -E 's/^[a-z]+(\([^)]+\))?!?: //')"
@@ -59,6 +60,8 @@ jobs:
                 FIXES="${FIXES}${entry}"$'\n'
               elif [ "$type" = "refactor" ]; then
                 REFACTORS="${REFACTORS}${entry}"$'\n'
+              elif [ "$type" = "style" ]; then
+                STYLES="${STYLES}${entry}"$'\n'
               fi
             fi
           done < <(git log "$RANGE" --format="%H %s" --no-merges)
@@ -84,7 +87,13 @@ jobs:
               printf "%s" "$REFACTORS"
               echo ""
             fi
-            if [ -z "$FEATS" ] && [ -z "$FIXES" ] && [ -z "$REFACTORS" ]; then
+            if [ -n "$STYLES" ]; then
+              echo "## Styles"
+              echo ""
+              printf "%s" "$STYLES"
+              echo ""
+            fi
+            if [ -z "$FEATS" ] && [ -z "$FIXES" ] && [ -z "$REFACTORS" ] && [ -z "$STYLES" ]; then
               echo "_No relevant conventional commits in this release._"
               echo ""
             fi
