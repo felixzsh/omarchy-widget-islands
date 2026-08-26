@@ -11,7 +11,7 @@ A set of floating **widget islands** around your Omarchy workspace. Your main ba
 3. **Drag anything from the bar into an island** — while dragging, every island reveals its drop zones; release and the widget lives in that edge's HUD.
 
 ```bash
-omarchy plugin add https://github.com/felixzsh/omarchy-rails --enable
+omarchy plugin add https://github.com/felixzsh/omarchy-widget-islands --enable
 ```
 
 From then on, reorder inside an island, move widgets between islands, drag them back to the main bar — all with live insertion indicators, like the native bar's own editing experience.
