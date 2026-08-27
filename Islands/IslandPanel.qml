@@ -649,6 +649,7 @@ PanelWindow {
         islandLayout: islandWindow.islandLayout
         hoveredSection: islandWindow.hoveredSection
         dotColor: islandWindow.foregroundColor
+        dotColors: islandWindow.indicatorColors
     }
 
         HoverHandler {
@@ -717,6 +718,19 @@ PanelWindow {
         var next = islands.filter(function(t) { return t !== isl })
         if (next.length === islands.length) return
         islands = next
+    }
+
+    readonly property var indicatorColors: ({
+        left: indicatorColorsFor("left"),
+        center: indicatorColorsFor("center"),
+        right: indicatorColorsFor("right")
+    })
+    function indicatorColorsFor(section) {
+        for (var i = 0; i < islands.length; i++) {
+            var isl = islands[i]
+            if (isl && isl.section === section) return isl.indicatorColors
+        }
+        return []
     }
 
     // One island per section. Normal mode reveals only activeSection; during a

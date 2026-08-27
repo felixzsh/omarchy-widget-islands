@@ -31,6 +31,34 @@ Item {
         var w = registry && registry.widgets
         return (w && w[canonicalName]) ? w[canonicalName].component : null
     }
+    function belongsTo(target, item) {
+        var node = target
+        for (var i = 0; node && i < 32; i++) {
+            if (node === item) return true
+            node = node.parent
+        }
+        return false
+    }
+    readonly property color indicatorColor: {
+        var item = widgetLoader.item
+        var fallback = barObj ? barObj.foreground : Color.bar.text
+        if (!item) return fallback
+
+        if ("islandIndicatorColor" in item && item.islandIndicatorColor !== undefined)
+            return Qt.color(item.islandIndicatorColor)
+
+        var targets = barObj && barObj.ownClickTargets ? barObj.ownClickTargets : []
+        var firstColor = fallback
+        for (var i = 0; i < targets.length; i++) {
+            var target = targets[i]
+            if (!target || !belongsTo(target, item)) continue
+            var color = target.active && target.useActiveColor !== false
+                ? target.activeColor : target.foreground
+            if (firstColor === fallback) firstColor = Qt.color(color)
+            if (target.active === true) return Qt.color(color)
+        }
+        return firstColor
+    }
     // Panel widgets expose opened/open()/close()
     readonly property bool panelOpen: {
         var it = widgetLoader.item

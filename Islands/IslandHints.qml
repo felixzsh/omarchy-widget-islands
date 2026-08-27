@@ -13,6 +13,8 @@ Item {
     property string hoveredSection: ""
     // Dot color — defaults to bar text, matches bar foreground on background.
     property color dotColor: Color.bar.text
+    // Optional per-widget colors, keyed by section and entry index.
+    property var dotColors: ({})
 
     // Derived
     readonly property bool isHorizontal: edge === "top" || edge === "bottom"
@@ -21,6 +23,11 @@ Item {
     function countFor(section) {
         if (!islandLayout || !islandLayout[section] || !Array.isArray(islandLayout[section])) return 0
         return islandLayout[section].length
+    }
+
+    function colorFor(section, index) {
+        var colors = dotColors && dotColors[section]
+        return colors && index < colors.length && colors[index] ? colors[index] : dotColor
     }
 
     // Horizontal islands (top/bottom): 3 columns side-by-side, dots in Row
@@ -45,7 +52,7 @@ Item {
                     model: hLeft.dotCount
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: root.dotColor
+                        color: root.colorFor("left", index)
                         opacity: hLeft.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
@@ -69,7 +76,7 @@ Item {
                     model: hCenter.dotCount
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: root.dotColor
+                        color: root.colorFor("center", index)
                         opacity: hCenter.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
@@ -93,7 +100,7 @@ Item {
                     model: hRight.dotCount
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: root.dotColor
+                        color: root.colorFor("right", index)
                         opacity: hRight.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
@@ -123,7 +130,7 @@ Item {
                     model: vLeft.dotCount
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: root.dotColor
+                        color: root.colorFor("left", index)
                         opacity: vLeft.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
@@ -146,7 +153,7 @@ Item {
                     model: vCenter.dotCount
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: root.dotColor
+                        color: root.colorFor("center", index)
                         opacity: vCenter.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }
@@ -169,7 +176,7 @@ Item {
                     model: vRight.dotCount
                     Rectangle {
                         width: 4; height: 4; radius: 2
-                        color: root.dotColor
+                        color: root.colorFor("right", index)
                         opacity: vRight.hovered ? 0.8 : 0.45
                         Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                     }

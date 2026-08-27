@@ -65,6 +65,15 @@ PanelWindow {
     readonly property int totalDepth: Math.max(thickness + 2, Math.round(barSize * 0.85))
     readonly property int hudGap: 0
     readonly property int pad: Style.space(1)
+    readonly property var indicatorColors: {
+        var colors = []
+        var children = horizontal ? contentRow.children : contentColumn.children
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i]
+            if (child && child.indicatorColor !== undefined) colors.push(child.indicatorColor)
+        }
+        return colors
+    }
 
     // Actual screen origin for drag geometry and cross-window drop targets.
     function screenOrigin() {
