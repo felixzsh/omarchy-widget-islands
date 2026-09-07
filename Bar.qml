@@ -229,7 +229,6 @@ Item {
   function pluginBarApiFor(pluginId, moduleName, registered) {
     var key = String(pluginId || "")
     if (!key) return null
-    if (pluginBarApis[key]) return pluginBarApis[key]
 
     var pluginShell = null
     if (registered && root.shell && typeof root.shell.pluginShellForId === "function") {
@@ -241,6 +240,11 @@ Item {
       // untrusted bar a generic facade factory would let it retrieve another
       // third-party plugin's live service object.
       pluginShell = root.shell.pluginShellForBarEntry(key, moduleName)
+    }
+
+    if (pluginBarApis[key]) {
+      pluginBarApis[key].shell = pluginShell
+      return pluginBarApis[key]
     }
 
     var api = pluginBarApiComponent.createObject(null, {
