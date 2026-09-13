@@ -193,11 +193,13 @@ if (typeof normalizeFn === 'function') {
       islands: { bottom: { left: [], center: [{id:'x'}], right: [] } } } }
     assertEqual(rm.moveBarEntryToIsland(c2, 'net', 'left', 'bottom', 'center', 0, false), true, 'bar->island before x')
     assertEqual(c2.bar.layout.left.map(e => e.id).join(','), 'tray', 'bar layout loses net')
+    assertEqual(c2.bar.layout.center.map(e => e.id).join(','), 'net', 'net keeps a hidden bar anchor')
     assertEqual(c2.bar.islands.bottom.center.map(e => e.id).join(','), 'net,x', 'island center gains net before x')
     // append to empty island section (targetIndex -1)
     c2 = { bar: { layout: { center: [{id:'clock'}] }, islands: { top: { left: [], center: [], right: [] } } } }
     assertEqual(rm.moveBarEntryToIsland(c2, 'clock', 'center', 'top', 'right', -1, false), true, 'bar->island append empty')
     assertEqual(c2.bar.islands.top.right.map(e => e.id).join(','), 'clock', 'empty right gains clock')
+    assertEqual(c2.bar.layout.center.map(e => e.id).join(','), 'clock', 'anchor kept after leaving center')
     // after=true inserts past target
     c2 = { bar: { layout: { right: [{id:'a'}] }, islands: { left: { left: [{id:'p'},{id:'q'}], center: [], right: [] } } } }
     rm.moveBarEntryToIsland(c2, 'a', 'right', 'left', 'left', 0, true)
@@ -220,93 +222,77 @@ if (typeof normalizeFn === 'function') {
     assertEqual(rm.islandReferencedIds({}).length, 0, 'empty islands -> empty ids')
     assertEqual(rm.islandReferencedIds(null).length, 0, 'null islands -> empty ids')
   }
-  if (rm.pruneIslandGhosts) {
-    let g1 = { bar: { islands: {
-      bottom: { left: [{id:'ghost1'}, {id:'alive'}], center: ['ghost2'], right: [] },
-      top: { left: [], center: [], right: [] },
-      left: { left: [], center: [], right: [] },
-      right: { left: [{id:'ghost1'}], center: [{id:'kept'}], right: [] } } } }
-    assertEqual(rm.pruneIslandGhosts(g1, ['ghost1', 'ghost2']), true, 'prune returns changed')
-    assertEqual(g1.bar.islands.bottom.left.map(e => e.id).join(','), 'alive', 'mixed section keeps alive')
-    assertEqual(g1.bar.islands.bottom.center.length, 0, 'string ghost removed')
-    assertEqual(g1.bar.islands.right.left.length, 0, 'same ghost across edges removed')
-    assertEqual(g1.bar.islands.right.center[0].id, 'kept', 'unlisted kept')
-    assertEqual(rm.pruneIslandGhosts(g1, ['ghost1', 'ghost2']), false, 'second prune no-op')
-    let g2 = { bar: { islands: { bottom: { left: [{id:'omarchy.indicators'}], center: [], right: [] },
-      top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
-      right: { left: [], center: [], right: [] } } } }
-    assertEqual(rm.pruneIslandGhosts(g2, ['ghost1']), false, 'built-in-like id untouched when not listed')
-    let g3 = { bar: { islands: { bottom: { left: [{id:'gone', pinned:true}, {id:'stay', format:'x'}], center: [], right: [] },
-      top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
-      right: { left: [], center: [], right: [] } } } }
-    rm.pruneIslandGhosts(g3, ['gone'])
-    assertEqual(g3.bar.islands.bottom.left.length, 1, 'only ghost removed')
-    assertEqual(g3.bar.islands.bottom.left[0].format, 'x', 'survivor settings intact')
+  if (rm.lastIndexById) {
+    const arr = [{id:'a'},'b',{id:'a'},{id:'c'}]
+    assertEqual(rm.lastIndexById(arr,'a'),2,'last index of a')
+    assertEqual(rm.lastIndexById(arr,'b'),1,'last index of string b')
+    assertEqual(rm.lastIndexById(arr,'zz'),-1,'missing -> -1')
+    assertEqual(rm.lastIndexById(null,'a'),-1,'null entries -> -1')
   }
-  if (rm.ensurePluginsEnabled) {
-    let e1 = { version: 1 }
-    assertEqual(rm.ensurePluginsEnabled(e1, ['akshar.radio-atlas', 'felixzsh.codexbar']), true, 'adds missing plugins list')
-    assertEqual(Array.isArray(e1.plugins), true, 'plugins array created')
-    assertEqual(e1.plugins.length, 2, 'two ids added')
-    assertEqual(e1.plugins[0].id, 'akshar.radio-atlas', 'entry shape {id}')
-    // idempotente
-    assertEqual(rm.ensurePluginsEnabled(e1, ['akshar.radio-atlas']), false, 'existing id no-op')
-    assertEqual(e1.plugins.length, 2, 'no duplicates')
-    // preserva entradas existentes; el host exige {id} en plugins[], así que
-    // una entrada string cruda cuenta como ausente y se añade normalizada
-    let e2 = { plugins: [{ id: 'a' }, 'b'] }
-    assertEqual(rm.ensurePluginsEnabled(e2, ['a', 'b', 'c']), true, 'adds missing (string b normalized)')
-    assertEqual(e2.plugins.length, 4, 'a, b(string), b{id}, c')
-    assertEqual(e2.plugins[2].id, 'b', 'string entry normalized to {id}')
-    assertEqual(e2.plugins[3].id, 'c', 'appended at end')
-    // null config safe
-    assertEqual(rm.ensurePluginsEnabled(null, ['x']), false, 'null config false')
-    assertEqual(rm.ensurePluginsEnabled({}, []), false, 'empty ids false')
+  if (rm.barLayoutHasId) {
+    const cfg = { bar: { layout: { left: [{id:'a'}], center: ['b'], right: [] } } }
+    assertEqual(rm.barLayoutHasId(cfg,'a'),true,'found in left')
+    assertEqual(rm.barLayoutHasId(cfg,'b'),true,'found as string in center')
+    assertEqual(rm.barLayoutHasId(cfg,'zz'),false,'absent -> false')
+    assertEqual(rm.barLayoutHasId({},'a'),false,'no layout -> false')
   }
-  if (rm.islandReconcilePlan) {
-    // REGRESIÓN (el caso que rompió el fix anterior): plugin desinstalado
-    // pero con su id aún en config.plugins → isEnabled() devuelve TRUE
-    // (envenenado por la entrada fantasma). El plan debe PODARLO igual.
-    let p1 = rm.islandReconcilePlan(
-      ['akshar.radio-atlas'],
-      {},                                                    // no instalado
-      function() { return false },                           // no en registry
-      function() { return true })                            // isEnabled envenenado = true
-    assertEqual(p1.ghosts.indexOf('akshar.radio-atlas') !== -1, true, 'REGRESSION: uninstalled-but-in-plugins[] still pruned')
-    // instalado + no-enabled → toEnable
-    let p2 = rm.islandReconcilePlan(['felixzsh.codexbar'],
-      { 'felixzsh.codexbar': { id: 'felixzsh.codexbar' } },
-      function() { return false },
-      function() { return false })
-    assertEqual(p2.toEnable.length, 1, 'installed not-enabled -> toEnable')
-    assertEqual(p2.ghosts.length, 0, 'no ghosts for installed')
-    // instalado + enabled → nada
-    let p3 = rm.islandReconcilePlan(['felixzsh.codexbar'],
-      { 'felixzsh.codexbar': {} },
-      function() { return true },
-      function() { return true })
-    assertEqual(p3.toEnable.length + p3.ghosts.length, 0, 'installed enabled -> no-op')
-    // built-in: no instalado pero SÍ en registry → nada
-    let p4 = rm.islandReconcilePlan(['omarchy.indicators'],
-      {},
-      function(id) { return id === 'omarchy.indicators' },
-      function() { return false })
-    assertEqual(p4.ghosts.length, 0, 'built-in in registry never ghosted')
-    // uninstalled sin registry → ghost
-    let p5 = rm.islandReconcilePlan(['dead.plugin'],
-      {},
-      function() { return false },
-      function() { return false })
-    assertEqual(p5.ghosts.indexOf('dead.plugin') !== -1, true, 'plain uninstall ghosted')
+  if (rm.visibleBarConfig) {
+    // anchors are marked, so rendering drops them wherever they sit.
+    const cfg = { position:'top', layout: {
+      left: [{id:'barleft'}], center: [{id:'clock'}], right: [] } }
+    cfg.layout.center.push({ id:'sp', __islandAnchor: true })
+    const vis = rm.visibleBarConfig(cfg)
+    assertEqual(vis.layout.left.map(e=>e.id).join(','), 'barleft', 'left untouched')
+    assertEqual(vis.layout.center.map(e=>e.id).join(','), 'clock', 'marked anchor hidden, clock kept')
+    assertEqual(cfg.layout.center.length, 2, 'source layout not mutated')
+    assertEqual(vis.layout.center.length, 1, 'anchor not rendered')
+    assertEqual(vis.layout.center[0].__islandAnchor, undefined, 'rendered entries carry no marker')
   }
-  if (rm.prunePluginsEnabled) {
-    let pl1 = { plugins: [{ id: 'a' }, { id: 'dead' }, 'rawstring'] }
-    assertEqual(rm.prunePluginsEnabled(pl1, ['dead']), true, 'prune removes stale marker')
-    assertEqual(pl1.plugins.length, 2, 'keeps others')
-    assertEqual(pl1.plugins[0].id, 'a', 'survivor intact')
-    assertEqual(pl1.plugins[1], 'rawstring', 'raw strings untouched')
-    assertEqual(rm.prunePluginsEnabled(pl1, ['nope']), false, 'no-op when absent')
-    assertEqual(rm.prunePluginsEnabled({}, ['a']), false, 'missing list no-op')
+  if (rm.islandAnchorMigrationNeeded && rm.migrateIslandAnchors) {
+    // legacy: island ids with no bar anchor -> migrate adds anchors once
+    let m = { bar: { layout: { left: [{id:'keep'}], center: [], right: [] },
+      islands: { bottom: { left: [{id:'a'}, {id:'b'}], center: [], right: [] } } } }
+    assertEqual(rm.islandAnchorMigrationNeeded(m), true, 'legacy config needs migration')
+    assertEqual(rm.migrateIslandAnchors(m), true, 'migration reports changed')
+    assertEqual(m.bar.islands.anchorsMigrated, true, 'flag persisted')
+    assertEqual(rm.barLayoutHasId(m,'a'), true, 'a anchored')
+    assertEqual(rm.barLayoutHasId(m,'b'), true, 'b anchored')
+    assertEqual(rm.isBarAnchor(m.bar.layout.center[0]), true, 'anchor carries the hidden marker')
+    assertEqual(rm.islandAnchorMigrationNeeded(m), false, 'idempotent once flagged')
+    // id already in layout -> no duplicate anchor
+    let m2 = { bar: { layout: { left: [], center: [{id:'c'}], right: [] },
+      islands: { bottom: { left: [{id:'c'}], center: [], right: [] } } } }
+    rm.migrateIslandAnchors(m2)
+    assertEqual(m2.bar.layout.center.length, 1, 'existing id not double-anchored')
+    // the wrapper only has the `bar:` subtree; the mutator gets the full config
+    let m3 = { layout: { left: [], center: [], right: [] },
+      islands: { bottom: { left: [{id:'x'}], center: [], right: [] } } }
+    assertEqual(rm.islandAnchorMigrationNeeded(m3), true, 'bar-subtree shape needs migration')
+    rm.migrateIslandAnchors(m3)
+    assertEqual(rm.barLayoutHasId(m3,'x'), true, 'anchor added to bar-subtree shape')
+    assertEqual(m3.islands.anchorsMigrated, true, 'bar-subtree flag persisted')
+  }
+  if (rm.orphanIslandIds && rm.dropIslandIds) {
+    // post-migration: anchor gone + not registered -> orphan
+    let o = { bar: { layout: { left: [], center: [{id:'alive'}], right: [] },
+      islands: { anchorsMigrated: true,
+        bottom: { left: [{id:'alive'}, {id:'gone'}], center: [], right: [] },
+        top: { left: [], center: [], right: [] }, left: { left: [], center: [], right: [] },
+        right: { left: [], center: [], right: [] } } } }
+    let ids = rm.orphanIslandIds(o, function(id){ return id === 'alive' })
+    assertEqual(ids.join(','), 'gone', 'only the orphan is reported')
+    assertEqual(rm.dropIslandIds(o, ids), true, 'drop reports changed')
+    assertEqual(o.bar.islands.bottom.left.map(e=>e.id).join(','), 'alive', 'orphan removed')
+    // before migration never prunes
+    let pre = { bar: { layout: { left: [], center: [], right: [] },
+      islands: { bottom: { left: [{id:'legacy'}], center: [], right: [] } } } }
+    assertEqual(rm.orphanIslandIds(pre, function(){ return false }).length, 0,
+      'pre-migration never orphans')
+    // bar-subtree shape (what the wrapper's pre-check sees)
+    let o2 = { layout: { left: [], center: [], right: [] },
+      islands: { anchorsMigrated: true, bottom: { left: [{id:'dead'}], center: [], right: [] } } }
+    assertEqual(rm.orphanIslandIds(o2, function(){ return false }).join(','), 'dead',
+      'bar-subtree orphan detected')
   }
   if (rm.moveIslandEntryBetweenEdges) {
     // left -> bottom, before target
@@ -349,6 +335,15 @@ if (typeof normalizeFn === 'function') {
     assertEqual(right.map(e=>e.id).join(','), 'r1', 'appended to right')
     // bad fromIndex
     assertEqual(rm.moveIslandEntryToBarAt(c4, 'bottom', 'left', 5, 'left', 0), false, 'bad island index false')
+    // consumes the hidden bar anchor so the widget renders on the bar again
+    let c6 = { bar: { layout: { left: [], center: [{id:'clock'}, {id:'r2', __islandAnchor:true}], right: [] },
+      islands: { anchorsMigrated: true,
+        bottom: { left: [{id:'r2'}], center: [], right: [] },
+        top: { left: [], center: [], right: [] }, right: { left: [], center: [], right: [] },
+        left: { left: [], center: [], right: [] } } } }
+    assertEqual(rm.moveIslandEntryToBarAt(c6, 'bottom', 'left', 0, 'left', -1), true, 'un-anchor move')
+    assertEqual(c6.bar.layout.center.map(e=>e.id).join(','), 'clock', 'bar anchor consumed')
+    assertEqual(c6.bar.layout.left.map(e=>e.id).join(','), 'r2', 'restored to the left section')
   }
   if (rm.barEntryIndexOfOccurrence) {
     const arr = [{id:'a'},'b',{id:'a'},{id:'c'}]

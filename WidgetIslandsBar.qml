@@ -46,6 +46,11 @@ Item {
     })
     property int barConfigSerial: 0
 
+    // What the inner Bar renders: the raw bar config with island anchors
+    // stripped, so island-hosted widgets do not also show on the main bar.
+    readonly property var displayBarConfig: IslandModel.visibleBarConfig(
+        Util.isPlainObject(root.barConfig) ? root.barConfig : root.fallbackBarConfig)
+
     // Cross-panel island drag coordination. The panel that
     // starts an island widget drag publishes its edge + live cursor here; peer
     // panels compute their own island offers from it, and the source resolves
@@ -97,17 +102,17 @@ Item {
         }
     }
 
-    // Keep plugin bar-widgets registered while they live in islands (the
-    // core's isEnabled() only scans bar.layout/plugins/bar.id, so an island
-    // placement alone reads as "disabled" and the core sweep drops them).
-    // Self-triggered: onIslandsConfigChanged / onCfgSerialChanged / Timer /
-    // pluginRegistry signals inside the bridge — NO root handlers here (a
-    // second Component.onCompleted at this level kills the whole component).
-    IslandPluginWidgetBridge {
-        id: pluginBridge
-        shell: innerBar && innerBar.shell ? innerBar.shell : null
-        islandsConfig: root.normalizedIslands
-        cfgSerial: root.barConfigSerial
+    // Island placements keep a hidden anchor in bar.layout (see IslandModel),
+    // so the host itself keeps the plugin enabled, registers the widget and
+    // starts its service — no privilege-escalating bridge needed. Reconcile
+    // lazily: one-time anchor migration for configs written by older versions,
+    // plus ghost cleanup for ids the host removed.
+    Timer {
+        id: anchorReconcile
+        interval: 4000
+        repeat: true
+        running: root.shell !== null
+        onTriggered: root.reconcileIslandAnchors()
     }
 
     // Duck contract for shell.bar — aliases to innerBar (main)
@@ -211,6 +216,23 @@ Item {
         barConfigSerial++
     }
 
+    // One-time: anchor every legacy island id so the host re-enables it. After
+    // that, prune island ids whose anchor the host removed and that are no
+    // longer registered (disabled/uninstalled plugins).
+    function reconcileIslandAnchors() {
+        if (!root.shell || typeof root.shell.mutateShellConfig !== "function") return
+        var config = Util.isPlainObject(root.barConfig) ? root.barConfig : root.fallbackBarConfig
+        var reg = root.barWidgetRegistry
+        var has = function(id) { return reg && typeof reg.has === "function" ? reg.has(id) : true }
+        var migrate = IslandModel.islandAnchorMigrationNeeded(config)
+        var orphans = migrate ? [] : IslandModel.orphanIslandIds(config, has)
+        if (!migrate && orphans.length === 0) return
+        root.shell.mutateShellConfig(function(c) {
+            if (migrate) IslandModel.migrateIslandAnchors(c)
+            if (orphans.length) IslandModel.dropIslandIds(c, orphans)
+        })
+    }
+
     onBarConfigChanged: applyBarConfig()
     Component.onCompleted: applyBarConfig()
 
@@ -219,7 +241,7 @@ Item {
         id: innerBar
         omarchyPath: root.omarchyPath
         barWidgetRegistry: root.barWidgetRegistry
-        barConfig: root.barConfig
+        barConfig: root.displayBarConfig
         shell: root.shell
         manifest: root.manifest
     }

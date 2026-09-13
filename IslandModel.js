@@ -2,6 +2,14 @@ function isPlainObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
+// The move functions run inside shell.mutateShellConfig, which hands them the
+// FULL shell config (with `.bar`). The wrapper only has the `bar:` subtree
+// (`.layout`/`.islands` directly). Tolerate both shapes.
+function barConfigSection(config) {
+  if (!isPlainObject(config)) return null
+  return isPlainObject(config.bar) ? config.bar : config
+}
+
 function normalizePosition(value) {
   var next = String(value || "").trim()
   return /^(top|bottom|left|right)$/.test(next) ? next : "top"
@@ -255,10 +263,53 @@ function moveIslandEntryAt(config, edge, fromSection, fromIndex, toSection, targ
   return true
 }
 
+// A hidden bar.layout entry that keeps an island-hosted widget ENABLED for the
+// host. Anchors carry an explicit marker (so rendering can drop them wherever
+// a reorder leaves them) and are appended to the center tail (so the bar's own
+// name-first entry lookups still hit visible duplicates first).
+var ANCHOR_KEY = "__islandAnchor"
+
+function isBarAnchor(entry) {
+  return isPlainObject(entry) && entry[ANCHOR_KEY] === true
+}
+
+function appendBarAnchor(config, entry) {
+  var bar = barConfigSection(config)
+  if (!bar) return
+  if (!isPlainObject(bar.layout)) bar.layout = {}
+  if (!Array.isArray(bar.layout.center)) bar.layout.center = []
+  var id = entryId(entry)
+  if (!id) return
+  var anchor = { id: id }
+  anchor[ANCHOR_KEY] = true
+  bar.layout.center.push(anchor)
+}
+
+// Remove one hidden anchor for this id (last match wins).
+function removeBarAnchor(config, entry) {
+  var bar = barConfigSection(config)
+  if (!bar || !isPlainObject(bar.layout)) return
+  var id = entryId(entry)
+  if (!id) return
+  var sections = ["center", "left", "right"]
+  for (var s = 0; s < sections.length; s++) {
+    var arr = bar.layout[sections[s]]
+    if (!Array.isArray(arr)) continue
+    var idx = -1
+    for (var i = 0; i < arr.length; i++) {
+      if (isBarAnchor(arr[i]) && entryId(arr[i]) === id) idx = i
+    }
+    if (idx >= 0) { arr.splice(idx, 1); return }
+  }
+}
+
 // Bar -> island move. Source is config.bar.layout[fromRegion], addressed by
 // NAME (upstream parity: bar's own dropBarModule is name-addressed too, and a
-// slot index into moduleSlots does not map to layout order). Destination uses
-// the same index/after protocol as moveIslandEntryAt.
+// slot index into moduleSlots does not map to layout order). The entry leaves
+// the visible layout but stays in bar.layout as a hidden anchor, because the
+// scoped host enables/registers/services a widget only while its id sits in
+// bar.layout / plugins[] / bar.id. Destination uses the same index/after
+// protocol as moveIslandEntryAt.
 function moveBarEntryToIsland(config, name, fromRegion, edge, toSection, targetIndex, after) {
   if (!isPlainObject(config.bar)) config.bar = {}
   if (!isPlainObject(config.bar.layout)) config.bar.layout = {}
@@ -268,6 +319,10 @@ function moveBarEntryToIsland(config, name, fromRegion, edge, toSection, targetI
   var fromIndex = rawIslandEntryIndex(fromEntries, name)
   if (fromIndex < 0) return false
 
+  var movedEntry = fromEntries[fromIndex]
+  fromEntries.splice(fromIndex, 1)
+  appendBarAnchor(config, movedEntry)
+
   var toEntries = rawIslandSection(config, edge, toSection)
   var toIndex
   if (toEntries.length === 0 || targetIndex < 0 || targetIndex >= toEntries.length) {
@@ -276,8 +331,6 @@ function moveBarEntryToIsland(config, name, fromRegion, edge, toSection, targetI
     toIndex = after ? targetIndex + 1 : targetIndex
   }
 
-  var movedEntry = fromEntries[fromIndex]
-  fromEntries.splice(fromIndex, 1)
   toEntries.splice(toIndex, 0, movedEntry)
   return true
 }
@@ -306,22 +359,107 @@ function islandReferencedIds(islands) {
   return out
 }
 
-// 3.8 — drop ghost entries from islands config: ids whose plugin is gone from
-// disk AND absent from the widget registry (built-ins like omarchy.indicators
-// live in the registry, so they never match). Mirrors what the host does to
-// bar.layout on plugin disable/remove — islands get the same treatment because
-// the host's findEntryLocation doesn't know about bar.islands.
-function pruneIslandGhosts(config, dropIds) {
-  var drop = {}
-  var list = Array.isArray(dropIds) ? dropIds : []
-  for (var i = 0; i < list.length; i++) drop[String(list[i])] = true
-  if (!isPlainObject(config) || !isPlainObject(config.bar) || !isPlainObject(config.bar.islands)) return false
+// Index of the LAST entry with this id in an array, or -1.
+function lastIndexById(entries, id) {
+  if (!Array.isArray(entries)) return -1
+  var found = -1
+  for (var i = 0; i < entries.length; i++) {
+    if (entryId(entries[i]) === id) found = i
+  }
+  return found
+}
 
+// True when an id already has an entry anywhere in bar.layout (`left`/`center`/
+// `right` — the sections the host scans for enablement).
+function barLayoutHasId(config, id) {
+  var bar = barConfigSection(config)
+  if (!bar || !isPlainObject(bar.layout)) return false
+  var sections = ["left", "center", "right"]
+  for (var s = 0; s < sections.length; s++) {
+    if (lastIndexById(bar.layout[sections[s]], id) >= 0) return true
+  }
+  return false
+}
+
+// The bar.layout the inner Bar should render: the raw layout with every hidden
+// anchor dropped. Filtering by marker (not position) keeps it correct even if
+// the bar's own reorder moved an anchor around.
+function visibleBarConfig(barConfig) {
+  var config = isPlainObject(barConfig) ? barConfig : {}
+  var layout = isPlainObject(config.layout) ? config.layout : {}
+  var out = {}
+  for (var key in config) out[key] = config[key]
+  out.layout = { left: [], center: [], right: [] }
+  var sections = ["left", "center", "right"]
+  for (var s = 0; s < sections.length; s++) {
+    var arr = layout[sections[s]]
+    var kept = []
+    if (Array.isArray(arr)) {
+      for (var i = 0; i < arr.length; i++) {
+        if (!isBarAnchor(arr[i])) kept.push(arr[i])
+      }
+    }
+    out.layout[sections[s]] = kept
+  }
+  return out
+}
+
+// One-time (flag-guarded) migration: island layouts written by older plugin
+// versions live only in bar.islands, so the scoped host never enabled them.
+// Anchor every id ONCE. The flag then stays set, so anchors the host removes
+// for a disabled/uninstalled plugin are never blindly re-added.
+function islandAnchorMigrationNeeded(config) {
+  var bar = barConfigSection(config)
+  if (!bar) return false
+  var islands = bar.islands
+  if (!isPlainObject(islands) || islands.anchorsMigrated === true) return false
+  return islandReferencedIds(islands).length > 0
+}
+
+function migrateIslandAnchors(config) {
+  if (!islandAnchorMigrationNeeded(config)) return false
+  var bar = barConfigSection(config)
+  var islands = bar.islands
+  var ids = islandReferencedIds(islands)
+  for (var i = 0; i < ids.length; i++) {
+    if (barLayoutHasId(config, ids[i])) continue
+    appendBarAnchor(config, { id: ids[i] })
+  }
+  islands.anchorsMigrated = true
+  return true
+}
+
+// Island ids whose anchor is gone (the host removes bar.layout entries for a
+// disabled/uninstalled plugin) and that are no longer registered. Only used
+// after migration, so a pristine legacy config is never treated as orphan.
+function orphanIslandIds(config, registryHas) {
+  var bar = barConfigSection(config)
+  if (!bar) return []
+  var islands = bar.islands
+  if (!isPlainObject(islands) || islands.anchorsMigrated !== true) return []
+  var has = typeof registryHas === "function" ? registryHas : function() { return true }
+  var ids = islandReferencedIds(islands)
+  var out = []
+  for (var i = 0; i < ids.length; i++) {
+    if (barLayoutHasId(config, ids[i])) continue
+    if (has(ids[i])) continue
+    out.push(ids[i])
+  }
+  return out
+}
+
+function dropIslandIds(config, ids) {
+  var bar = barConfigSection(config)
+  if (!bar) return false
+  var islands = bar.islands
+  if (!isPlainObject(islands) || !Array.isArray(ids)) return false
+  var drop = {}
+  for (var i = 0; i < ids.length; i++) drop[String(ids[i])] = true
   var changed = false
   var edges = ["top", "bottom", "left", "right"]
   var sections = ["left", "center", "right"]
   for (var e = 0; e < edges.length; e++) {
-    var layout = config.bar.islands[edges[e]]
+    var layout = islands[edges[e]]
     if (!isPlainObject(layout)) continue
     for (var s = 0; s < sections.length; s++) {
       var arr = layout[sections[s]]
@@ -334,28 +472,6 @@ function pruneIslandGhosts(config, dropIds) {
       }
       layout[sections[s]] = kept
     }
-  }
-  return changed
-}
-
-// 3.8 — mark plugins enabled via the host's OWN config.plugins list (the
-// "enabled without a bar slot" mechanism). Island placements are invisible to
-// the host's isEnabled() (findEntryLocation only scans bar.layout/plugins/
-// bar.id), so island-hosted plugins get added here to unlock the NATIVE
-// widget/service/panel lifecycles instead of mirroring them in the bridge.
-function ensurePluginsEnabled(config, ids) {
-  if (!isPlainObject(config)) return false
-  if (!Array.isArray(config.plugins)) config.plugins = []
-  var changed = false
-  var list = Array.isArray(ids) ? ids : []
-  for (var i = 0; i < list.length; i++) {
-    var key = String(list[i])
-    var found = false
-    for (var j = 0; j < config.plugins.length; j++) {
-      var e = config.plugins[j]
-      if (isPlainObject(e) && entryId(e) === key) { found = true; break }
-    }
-    if (!found) { config.plugins.push({ id: key }); changed = true }
   }
   return changed
 }
@@ -421,75 +537,20 @@ function barEntryIndexOfOccurrence(entries, name, occurrence) {
 
 // Island -> native bar. Source index-addressed within its section
 // (duplicate ids safe); destination is a bar layout region with an insert-
-// before index resolved by the caller (-1 / overflow = append).
+// before index resolved by the caller (-1 / overflow = append). The widget's
+// hidden anchor is consumed so it renders on the bar again.
 function moveIslandEntryToBarAt(config, fromEdge, fromSection, fromIndex, toRegion, toIndex) {
   var fromEntries = rawIslandSection(config, fromEdge, fromSection)
   if (!Array.isArray(fromEntries) || fromIndex < 0 || fromIndex >= fromEntries.length) return false
 
-  var toEntries = barLayoutSection(config, toRegion)
-  var destIndex = toIndex < 0 || toIndex > toEntries.length ? toEntries.length : toIndex
-
   var movedEntry = fromEntries[fromIndex]
   fromEntries.splice(fromIndex, 1)
+  removeBarAnchor(config, movedEntry)
+
+  var toEntries = barLayoutSection(config, toRegion)
+  var destIndex = toIndex < 0 || toIndex > toEntries.length ? toEntries.length : toIndex
   toEntries.splice(destIndex, 0, movedEntry)
   return true
-}
-
-// 3.8 — remove ids from config.plugins (stale "enabled" markers left behind
-  // when an island-hosted plugin is uninstalled without the host's disable path
-// firing; they'd keep isEnabled() true forever and break reinstalls).
-function prunePluginsEnabled(config, ids) {
-  if (!isPlainObject(config) || !Array.isArray(config.plugins)) return false
-  var drop = {}
-  var list = Array.isArray(ids) ? ids : []
-  for (var i = 0; i < list.length; i++) drop[String(list[i])] = true
-  var kept = []
-  var changed = false
-  for (var j = 0; j < config.plugins.length; j++) {
-    var e = config.plugins[j]
-    if (isPlainObject(e) && drop[entryId(e)]) changed = true
-    else kept.push(e)
-  }
-  config.plugins = kept
-  return changed
-}
-
-// 3.8 — PURE decision logic for bridge.reconcile(), extracted so it is
-// unit-testable (the QML side just executes the plan in ONE config write).
-//
-  // Ghost detection must NEVER use isEnabled(): once we add an island-hosted
-// plugin to config.plugins, isEnabled() returns true for it, and a plugin
-// uninstalled without the host's disable path keeps that stale entry —
-// isEnabled stays true and the dot would linger forever. Ghosts are decided
-// purely on installedPlugins presence (with the registry guard protecting
-// bar-built-in widgets like omarchy.indicators, which are not plugins).
-function islandReconcilePlan(wanted, installedKeys, registryHas, isEnabled) {
-  var list = Array.isArray(wanted) ? wanted : []
-  var hasInstalled = typeof installedKeys === "function" ? installedKeys
-    : function(key) {
-        if (!installedKeys) return false
-        if (typeof installedKeys.has === "function") return installedKeys.has(key)
-        return installedKeys[key] !== undefined && installedKeys[key] !== null
-      }
-  var hasRegistry = typeof registryHas === "function" ? registryHas : function() { return false }
-  var enabled = typeof isEnabled === "function" ? isEnabled : function() { return false }
-
-  var toEnable = []
-  var ghosts = []
-  for (var i = 0; i < list.length; i++) {
-    var id = String(list[i])
-    if (!id) continue
-    if (hasInstalled(id)) {
-      // Installed: unlock the native lifecycle via config.plugins (the
-      // host's own "enabled without a bar slot" mechanism) when needed.
-      if (!enabled(id)) toEnable.push(id)
-    } else if (!hasRegistry(id)) {
-      // Uninstalled (or built-in absent from the registry): drop the island
-      // entry — the host's findEntryLocation can't see islands to clean it.
-      ghosts.push(id)
-    }
-  }
-  return { toEnable: toEnable, ghosts: ghosts }
 }
 
 if (typeof module !== "undefined") {
@@ -518,9 +579,15 @@ if (typeof module !== "undefined") {
     barLayoutSection: barLayoutSection,
     barEntryIndexOfOccurrence: barEntryIndexOfOccurrence,
     islandReferencedIds: islandReferencedIds,
-    pruneIslandGhosts: pruneIslandGhosts,
-    ensurePluginsEnabled: ensurePluginsEnabled,
-    prunePluginsEnabled: prunePluginsEnabled,
-    islandReconcilePlan: islandReconcilePlan
+    lastIndexById: lastIndexById,
+    barLayoutHasId: barLayoutHasId,
+    isBarAnchor: isBarAnchor,
+    visibleBarConfig: visibleBarConfig,
+    islandAnchorMigrationNeeded: islandAnchorMigrationNeeded,
+    migrateIslandAnchors: migrateIslandAnchors,
+    orphanIslandIds: orphanIslandIds,
+    dropIslandIds: dropIslandIds,
+    appendBarAnchor: appendBarAnchor,
+    removeBarAnchor: removeBarAnchor
   }
 }
