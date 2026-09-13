@@ -112,6 +112,17 @@ Item {
         restricted: !slot.firstParty
     }
 
+    // The facade's scoped mirrors are getter calls, so re-read them when the
+    // bar's popout/click-target/layout state changes (the same signals Bar.qml
+    // watches). The Connections must live here: the facade root has no default
+    // property, so it cannot host child objects itself.
+    Connections {
+        target: pluginBar.source
+        function onActivePopoutChanged() { pluginBar.refresh() }
+        function onClickTargetsChanged() { pluginBar.refresh() }
+        function onLayoutConfigChanged() { pluginBar.refresh() }
+    }
+
     function injectBar(item) {
         if (!item || !("bar" in item)) return
         item.bar = firstParty ? barObj : pluginBar

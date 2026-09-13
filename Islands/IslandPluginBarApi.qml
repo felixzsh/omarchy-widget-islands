@@ -89,19 +89,14 @@ PluginBarApi {
 
     // Scoped mirrors of the bar-owned objects. Re-read on the same signals
     // Bar.qml watches, since the getters are function calls (no auto-binding).
+    // The root here is a plain QtObject with no default property, so the
+    // Connections live in IslandWidget (which owns this facade).
     function refresh() {
         activePopout = source && source.pluginOwnsBarObject(ownerId, source.activePopout)
             ? source.activePopout : foreignPopoutMarker
         clickTargets = source ? source.pluginClickTargets(ownerId) : []
         layoutConfig = source && typeof source.publicLayoutConfig === "function"
             ? source.publicLayoutConfig() : ({})
-    }
-
-    Connections {
-        target: api.source
-        function onActivePopoutChanged() { api.refresh() }
-        function onClickTargetsChanged() { api.refresh() }
-        function onLayoutConfigChanged() { api.refresh() }
     }
 
     Component.onCompleted: refresh()
