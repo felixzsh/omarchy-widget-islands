@@ -1,0 +1,92 @@
+name: bar-upstream
+
+# Keeps a published, bar-only branch in sync with upstream omarchy.
+#
+# `git subtree split` rewrites `shell/plugins/bar/` into a history rooted at
+# the plugin root, so this repo can merge upstream bar changes as a normal
+# fast-forward. The split is deterministic (it preserves the original commit
+# author/committer/message), so the published branch only ever grows.
+#
+# Locally: `git fetch && git merge origin/bar-upstream`.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: bar-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream bar history
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/basecamp/omarchy.git
+          git fetch --no-tags --prune upstream quattro
+
+      - name: Split shell/plugins/bar
+        id: split
+        run: |
+          set -euo pipefail
+          git subtree split --prefix=shell/plugins/bar upstream/quattro -b bar-new
+          echo "tip=$(git rev-parse bar-new)" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with published branch
+        id: decide
+        run: |
+          set -euo pipefail
+          new="${{ steps.split.outputs.tip }}"
+          cur="$(git rev-parse --verify --quiet origin/bar-upstream || true)"
+          echo "publish=false" >> "$GITHUB_OUTPUT"
+          echo "diverged=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$cur" ]; then
+            echo "origin/bar-upstream does not exist yet; publishing $new"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [ "$cur" = "$new" ]; then
+            echo "Already up to date at $new"
+          elif git merge-base --is-ancestor "$cur" "$new"; then
+            echo "Fast-forward $cur -> $new"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::origin/bar-upstream is not an ancestor of the new split"
+            echo "diverged=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish bar-upstream
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          git push origin bar-new:refs/heads/bar-upstream
+
+      - name: Report divergence
+        if: steps.decide.outputs.diverged == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          open="$(gh issue list --state open --limit 100 \
+            --search 'bar-upstream diverged in:title' --json number --jq 'length')"
+          if [ "$open" = "0" ]; then
+            body="$(cat <<'EOF'
+          El split automático ya no desciende de `origin/bar-upstream`.
+          Probable cambio de `git-subtree` o del prefijo `shell/plugins/bar`.
+          Resincronizar a mano y volver a publicar la rama.
+          EOF
+          )"
+            gh issue create \
+              --title "bar-upstream diverged: revisar split de shell/plugins/bar" \
+              --body "$body"
+          fi
+          exit 1
