@@ -44,11 +44,6 @@ PluginBarApi {
     position: edge
     vertical: edge === "left" || edge === "right"
 
-    shell: restricted && source && source.shell
-        && typeof source.shell.pluginShellForBarEntry === "function"
-        ? source.shell.pluginShellForBarEntry(ownerId, moduleName)
-        : null
-
     _showTooltip: function(target, text) {
         if (source) source.showTooltip(target, text)
     }
@@ -91,7 +86,16 @@ PluginBarApi {
     // Bar.qml watches, since the getters are function calls (no auto-binding).
     // The root here is a plain QtObject with no default property, so the
     // Connections live in IslandWidget (which owns this facade).
+    //
+    // `shell` is ASSIGNED, not bound: binding it closes a dependency cycle
+    // through the host factory (QML reports "Binding loop detected for property
+    // shell"). Upstream assigns its facade's shell imperatively for the same
+    // reason.
     function refresh() {
+        shell = restricted && source && source.shell
+            && typeof source.shell.pluginShellForBarEntry === "function"
+            ? source.shell.pluginShellForBarEntry(ownerId, moduleName)
+            : null
         activePopout = source && source.pluginOwnsBarObject(ownerId, source.activePopout)
             ? source.activePopout : foreignPopoutMarker
         clickTargets = source ? source.pluginClickTargets(ownerId) : []
@@ -99,5 +103,8 @@ PluginBarApi {
             ? source.publicLayoutConfig() : ({})
     }
 
+    onSourceChanged: refresh()
+    onOwnerIdChanged: refresh()
+    onRestrictedChanged: refresh()
     Component.onCompleted: refresh()
 }
