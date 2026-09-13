@@ -109,7 +109,8 @@ Item {
             schema: bw.schema || [],
             pluginId: manifest.id,
             sourceDir: manifest.__sourceDir || "",
-            source: "plugin"
+            source: "plugin",
+            firstParty: !!manifest.__isFirstParty
         }
     }
 

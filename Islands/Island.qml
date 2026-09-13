@@ -201,6 +201,7 @@ PanelWindow {
             delegate: IslandWidget {
                 registry: root.registry
                 barObj: islandBar
+                barApi: root.barApi
                 edge: root.edge
                 host: root
                 dragHost: root.dragHost
@@ -220,6 +221,7 @@ PanelWindow {
             delegate: IslandWidget {
                 registry: root.registry
                 barObj: islandBar
+                barApi: root.barApi
                 edge: root.edge
                 host: root
                 dragHost: root.dragHost

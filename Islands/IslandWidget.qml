@@ -19,6 +19,8 @@ Item {
     required property string edge
     // Duck-contract shim (position/vertical reflect the island edge)
     required property var barObj
+    // Real inner bar: capability source for the third-party facade.
+    required property var barApi
     // Owning island + IslandPanel drag API
     required property var host
     required property var dragHost
@@ -27,6 +29,12 @@ Item {
     readonly property string moduleName: IslandModel.entryId(modelData)
     readonly property var moduleSettings: IslandModel.entrySettings(modelData)
     readonly property string canonicalName: Util.canonicalWidgetId(moduleName)
+    // Built-ins are trusted and keep the full shim; everyone else gets the
+    // restricted facade (mirrors Bar.qml's firstParty ? root : facade).
+    readonly property var registryMetadata: registry && registry.metadataFor
+        ? registry.metadataFor(canonicalName) : null
+    readonly property bool firstParty:
+        !!(registryMetadata && registryMetadata.firstParty === true)
     readonly property var registryComponent: {
         var w = registry && registry.widgets
         return (w && w[canonicalName]) ? w[canonicalName].component : null
@@ -92,6 +100,23 @@ Item {
         if (isDragSource && dragHost) dragHost.clearIslandDrag()
     }
 
+    // Restricted surface handed to third-party widgets instead of the shim.
+    IslandPluginBarApi {
+        id: pluginBar
+        source: slot.barApi
+        islandBar: slot.barObj
+        edge: slot.edge
+        ownerId: slot.canonicalName
+        pluginId: slot.canonicalName
+        moduleName: slot.moduleName
+        restricted: !slot.firstParty
+    }
+
+    function injectBar(item) {
+        if (!item || !("bar" in item)) return
+        item.bar = firstParty ? barObj : pluginBar
+    }
+
     Loader {
         id: widgetLoader
         anchors.centerIn: parent
@@ -100,7 +125,7 @@ Item {
         opacity: slot.isDragSource ? 0.22 : 1.0
         onLoaded: {
             if (!item) return
-            if ("bar" in item) item.bar = slot.barObj
+            slot.injectBar(item)
             if ("moduleName" in item) item.moduleName = slot.moduleName
             if ("settings" in item) item.settings = slot.moduleSettings
             console.warn("[ISLAND] loaded:", slot.moduleName,
