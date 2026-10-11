@@ -10,11 +10,10 @@ BarIndicator {
 
   active: remoteSessionService ? remoteSessionService.active : false
   activeText: "󰢹"
-  inactiveText: "󰢹"
   activeTooltipText: peers.length > 0 ? "Remote session from " + peers.join(", ") : "Remote session"
-  inactiveTooltipText: "Remote Session"
   useActiveColor: true
   activeColor: Commons.Color.urgent
+  revealWhenInactive: false
 
   Connections {
     target: root.indicatorHost
