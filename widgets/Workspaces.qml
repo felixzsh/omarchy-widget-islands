@@ -48,12 +48,41 @@ BarWidget {
     return "\uDB85\uDCFB"
   }
 
-  function refresh() {
+  // A layout only changes through the layout commands, which ask for a refresh,
+  // or a config reload, so each workspace's mode is read once and cached rather
+  // than running the script on every workspace switch.
+  property var modeCache: ({})
+  property int modeGeneration: 0
+  property int modeProcWorkspace: -1
+  property int modeProcGeneration: 0
+
+  function focusedWorkspaceId() {
+    return Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+  }
+
+  function showFocusedMode() {
+    var mode = root.modeCache[root.focusedWorkspaceId()]
+    if (mode !== undefined) root.focusedMode = mode
+    else readMode()
+  }
+
+  function readMode() {
     if (modeProc.running) {
       root.modeStale = true
       return
     }
+    var id = root.focusedWorkspaceId()
+    if (id === -1) return
+    root.modeProcWorkspace = id
+    root.modeProcGeneration = root.modeGeneration
+    modeProc.command = ["omarchy-hyprland-workspace-layout-current", String(id)]
     modeProc.running = true
+  }
+
+  function refresh() {
+    root.modeCache = ({})
+    root.modeGeneration++
+    readMode()
   }
 
   function cycleLayout() {
@@ -64,22 +93,28 @@ BarWidget {
 
   Connections {
     target: Hyprland
-    function onFocusedWorkspaceChanged() { root.refresh() }
+    function onFocusedWorkspaceChanged() { root.showFocusedMode() }
+    function onRawEvent(event) {
+      if (event && String(event.name) === "configreloaded") root.refresh()
+    }
   }
 
   Process {
     id: modeProc
-    command: ["omarchy-hyprland-workspace-layout-current"]
     stdout: StdioCollector {
       onStreamFinished: {
         var mode = text.trim()
-        if (mode) root.focusedMode = mode
+        // A read that started before a refresh may predate the change.
+        if (!mode || root.modeProcGeneration !== root.modeGeneration) return
+        root.modeCache[root.modeProcWorkspace] = mode
+        if (root.modeProcWorkspace === root.focusedWorkspaceId()) root.focusedMode = mode
       }
     }
     onExited: {
       if (!root.modeStale) return
       root.modeStale = false
-      root.refresh()
+      // Deferred: the process still reports running while it signals exit.
+      Qt.callLater(root.showFocusedMode)
     }
   }
 
