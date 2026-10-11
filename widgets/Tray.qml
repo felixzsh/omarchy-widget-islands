@@ -810,9 +810,10 @@ BarWidget {
     }
 
     TrayIcon {
-      anchors.centerIn: parent
-      width: Style.space(12)
-      height: Style.space(12)
+      x: (parent.width - width) / 2
+      y: (parent.height - height) / 2
+      width: Style.bar.iconSize
+      height: Style.bar.iconSize
       icon: trayItemRoot.modelData.icon
     }
 
