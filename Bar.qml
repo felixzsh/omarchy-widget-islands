@@ -45,7 +45,7 @@ Item {
   property string omarchyConfigDir: home + "/.config/omarchy"
   property var fallbackBarConfig: ({
     position: "top",
-    transparent: false,
+    background: "opaque",
     centerAnchor: "omarchy.clock",
     layout: { left: [], center: [], right: [] }
   })
@@ -54,6 +54,12 @@ Item {
   property bool requestedTransparent: false
   property bool useTransparentForeground: false
   property bool transparent: false
+  // A see-through bar that Hyprland blurs behind (the bar-glassy toggle), so
+  // its theme background stays faintly. A transparent bar wins over it.
+  property bool glassy: false
+  // The look the blur behind the bar was last synced for. A background set by
+  // editing shell.json skips the CLI, so the bar syncs Hyprland's blur itself.
+  property string glassSyncedLook: ""
   property bool centerSectionHovered: false
   // One bar surface exists per monitor and each reports into this count, so a
   // pointer crossing from one monitor's bar to another's stays counted however
@@ -79,6 +85,7 @@ Item {
   property color barForeground: useTransparentForeground ? transparentForeground : themeForeground
   property bool foregroundAnimationEnabled: true
   property color background: Commons.Color.bar.background
+  readonly property color glassBackground: Qt.rgba(background.r, background.g, background.b, Math.min(background.a, 0.35))
   property color urgent: Commons.Color.bar.active
 
   Behavior on barForeground { enabled: root.foregroundAnimationEnabled; ColorAnimation { duration: Style.duration(420); easing.type: Easing.OutCubic } }
@@ -651,7 +658,18 @@ Item {
     var config = Util.isPlainObject(barConfig) ? barConfig : fallbackBarConfig
 
     position = normalizePosition(config.position)
-    setRequestedTransparency(config.transparent === true)
+    // opaque, glassy or none; a config from before background says
+    // transparent instead.
+    var look = config.background || (config.transparent === true ? "none" : "opaque")
+    setRequestedTransparency(look === "none")
+    // A bar going clear waits for its text color before dropping its
+    // background, so a glassy one stays glassy until then rather than
+    // flashing opaque. Once clear, transparent wins over a stale glassy.
+    if (look !== "none") glassy = look === "glassy"
+    if (look !== glassSyncedLook) {
+      glassSyncedLook = look
+      Util.execDetached("omarchy-bar sync-glass")
+    }
     centerAnchor = Util.canonicalWidgetId(config.centerAnchor || "")
 
     // layoutEntries feeds plain JS arrays to the module Repeaters, and QML
@@ -913,16 +931,10 @@ Item {
     Util.execDetached(command)
   }
 
-  function toggleTransparency() {
-    var nextTransparent = !(root.requestedTransparent === true)
-    if (root.shell && typeof root.shell.mutateShellConfig === "function") {
-      root.shell.mutateShellConfig(function(config) {
-        if (!Util.isPlainObject(config.bar)) config.bar = {}
-        config.bar.transparent = nextTransparent
-      })
-    } else {
-      root.setRequestedTransparency(nextTransparent)
-    }
+  // Steps the bar background from clear to glassy to opaque and around. Through
+  // omarchy-bar, which keeps Hyprland's blur behind a glassy bar in step.
+  function cycleBackground() {
+    Util.execDetached("omarchy-bar background cycle")
   }
 
   function rawLayoutSection(config, region) {
@@ -1357,7 +1369,7 @@ Item {
 
     implicitWidth: root.vertical ? thickness : 0
     implicitHeight: root.vertical ? 0 : thickness
-    color: root.transparent ? "transparent" : root.background
+    color: root.transparent ? "transparent" : (root.glassy ? root.glassBackground : root.background)
     surfaceFormat.opaque: false
     WlrLayershell.namespace: "omarchy-bar"
     WlrLayershell.layer: WlrLayer.Top
@@ -1832,7 +1844,7 @@ Item {
         return
       }
       if (mouse.button === Qt.LeftButton) {
-        root.toggleTransparency()
+        root.cycleBackground()
         mouse.accepted = true
       }
     }
