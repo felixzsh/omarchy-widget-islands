@@ -31,17 +31,13 @@ BarIndicator {
   onBarChanged: refresh()
   Component.onCompleted: refresh()
 
+  // No polling: each probe is a hardened script plus sudo calls that can log.
+  // omarchy-sudo-passwordless refreshes omarchy.indicators on enable, disable
+  // and expiry instead.
   Connections {
     target: root.indicatorHost
     ignoreUnknownSignals: true
     function onRefreshRequested() { root.refresh() }
-  }
-
-  Timer {
-    interval: 5000
-    repeat: true
-    running: !!root.bar
-    onTriggered: root.refresh()
   }
 
   Process {
