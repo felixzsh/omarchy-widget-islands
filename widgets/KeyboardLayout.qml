@@ -35,6 +35,18 @@ BarWidget {
   // Short language code per layout description ("English (US)": "en"), read from
   // xkb's own table rather than maintained by hand.
   property var layoutBriefs: ({})
+  // The table is only needed once the widget shows a label, which a seat with
+  // one layout and one input method never does, so it's read on first need.
+  property bool layoutsRead: false
+  property bool briefsRequested: false
+  readonly property bool needsBriefs: layoutsRead && (multipleLayouts || multipleInputs)
+  onNeedsBriefsChanged: loadBriefs()
+
+  function loadBriefs() {
+    if (!needsBriefs || briefsRequested) return
+    briefsRequested = true
+    briefsProc.running = true
+  }
   readonly property string layoutLabel: KeyboardLayoutModel.shortLabel(layoutFull, layoutBriefs)
   readonly property var inputState: InputMethodState.state
   readonly property bool multipleInputs: (inputState.methods || []).length > 1
@@ -99,10 +111,7 @@ BarWidget {
     refreshTimer.restart()
   }
 
-  Component.onCompleted: {
-    briefsProc.running = true
-    refresh()
-  }
+  Component.onCompleted: refresh()
 
   Connections {
     target: Hyprland
@@ -171,6 +180,7 @@ BarWidget {
         root.keyboardCount = typed.length
         root.keyboardName = String(kb.name || "")
         root.multipleLayouts = kb.layout === undefined || String(kb.layout).indexOf(",") !== -1
+        root.layoutsRead = true
         root.layoutIndex = kb.active_layout_index || 0
         root.layoutCount = kb.layout === undefined ? 0 : String(kb.layout).split(",").length
         // Buttons and virtual keyboards are included on purpose: they hold the
@@ -184,8 +194,9 @@ BarWidget {
     }
   }
 
-  // The table only changes when xkb data is upgraded, so read it at startup and
-  // leave it alone. The bar is built per monitor, so this runs once per widget.
+  // The table only changes when xkb data is upgraded, so read it once, when
+  // first needed, and leave it alone. The bar is built per monitor, so this
+  // runs once per widget.
   // The exotic rulesets cover layouts like trans (IPA) that ship in the same xkb
   // package and set just as well, so load them or those labels lose their code.
   Process {
