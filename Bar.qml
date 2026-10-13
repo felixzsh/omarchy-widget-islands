@@ -98,6 +98,20 @@ Item {
   property bool tooltipShown: false
   property int tooltipRequest: 0
   property var activePopout: null
+  // A widget is being dragged that could go into the tray section, so the
+  // tray's drawer opens to show where.
+  readonly property bool traySectionDragActive: !!barDragSource && !barDragSource.hostsTraySection
+  // An open panel from a widget in the tray section keeps the tray's drawer
+  // open, so the panel's widget stays on screen under it.
+  readonly property bool traySectionPopoutOpen: {
+    var owner = activePopout
+    if (!owner) return false
+    for (var i = 0; i < moduleSlots.length; i++) {
+      var slot = moduleSlots[i]
+      if (slot && slot.activeItem === owner) return slot.region === "tray"
+    }
+    return false
+  }
   property var barDragSource: null
   property var barDragTarget: null
   property var barDragTargetGeometry: null
@@ -147,6 +161,8 @@ Item {
     api.foregroundAnimationEnabled = Qt.binding(function() { return root.foregroundAnimationEnabled })
     api.centerSectionRevealHeld = Qt.binding(function() { return root.centerSectionRevealHeld })
     api._centerHoverRevealSuppressed = Qt.binding(function() { return root.centerHoverRevealSuppressed })
+    api.traySectionDragActive = Qt.binding(function() { return root.traySectionDragActive })
+    api.traySectionPopoutOpen = Qt.binding(function() { return root.traySectionPopoutOpen })
     root.syncPluginBarApiObjects(api)
   }
 
@@ -642,7 +658,8 @@ Item {
     return {
       left:   pinTrayToInner(normalized.left,   "left"),
       center: pinTrayToInner(normalized.center, "center"),
-      right:  pinTrayToInner(normalized.right,  "right")
+      right:  pinTrayToInner(normalized.right,  "right"),
+      tray:   normalized.tray
     }
   }
 
@@ -1000,11 +1017,27 @@ Item {
         return null
     }
 
+    // The tray cannot go into its own drawer.
+    var intoTraySection = !sourceSlot || !sourceSlot.hostsTraySection
     var candidates = []
     for (var i = 0; i < moduleSlots.length; i++) {
       var slot = moduleSlots[i]
       if (!slot || slot === sourceSlot || !slot.visible || slot.width <= 0 || slot.height <= 0) continue
       if (sourceWindow && !root.sameWindow(root.slotWindow(slot), sourceWindow)) continue
+      if (slot.region === "tray" && !intoTraySection) continue
+
+      // An empty tray section offers its drawer as the place to drop.
+      var dropSpace = slot.sectionDropSpace
+      if (intoTraySection && dropSpace && dropSpace.visible && dropSpace.width > 0 && dropSpace.height > 0) {
+        var spacePoint = dropSpace.mapToItem(null, 0, 0)
+        candidates.push({ slot: dropSpace, x: spacePoint.x, y: spacePoint.y, width: dropSpace.width, height: dropSpace.height })
+      }
+      // Over the drawer, the drop goes into it, never beside the tray, whose
+      // edge can line up with the last widget's in there.
+      if (intoTraySection && slot.hostsTraySection) {
+        var trayPoint = slot.mapFromItem(null, scenePoint.x, scenePoint.y)
+        if (slot.traySectionContains(trayPoint.x, trayPoint.y)) continue
+      }
 
       var slotPoint = { x: slot.x, y: slot.y }
       try {
@@ -1904,6 +1937,15 @@ Item {
     }
   }
 
+  Component {
+    id: traySectionComponent
+
+    ModuleList {
+      entries: root.layoutEntries("tray")
+      region: "tray"
+    }
+  }
+
   component ModuleSlot: Item {
     id: slot
 
@@ -1940,10 +1982,36 @@ Item {
     // dot should be along the bar, so it tracks what the module paints
     // instead of a fraction of whatever slot it happens to fill.
     readonly property real panelIndicatorExtent: {
+      var mark = panelIndicatorItem
+      if (mark) return Math.max(Style.space(10), Math.round((root.vertical ? mark.height : mark.width) * 0.55))
       var key = root.vertical ? "openPanelIndicatorHeight" : "openPanelIndicatorWidth"
       var hint = activeItem && key in activeItem ? activeItem[key] : undefined
       if (hint !== undefined && hint !== null && hint > 0) return Math.round(hint)
       return Math.max(Style.space(10), Math.round((root.vertical ? slot.height : slot.width) * 0.55))
+    }
+    // A module holding several things a panel can open from (the tray's
+    // icons) names the one whose panel is open, and the mark sits under it
+    // rather than under the middle of the module.
+    readonly property Item panelIndicatorItem: activeItem && "openPanelIndicatorItem" in activeItem ? activeItem.openPanelIndicatorItem : null
+    readonly property real panelIndicatorCenter: {
+      var mark = panelIndicatorItem
+      if (!mark) return (root.vertical ? slot.height : slot.width) / 2
+      // A menu opened while the drawer is still sliding open moves with it;
+      // mapToItem alone would not re-run as the item moves.
+      var reveal = "revealProgress" in activeItem ? activeItem.revealProgress : 0
+      var point = mark.mapToItem(slot, mark.width / 2, mark.height / 2)
+      return root.vertical ? point.y : point.x
+    }
+    // The tray, or a clone of it, hosts the tray section in its drawer; one
+    // inside the drawer does not, so the section never holds itself.
+    readonly property bool hostsTraySection: region !== "tray" && !!activeItem && "sectionHost" in activeItem
+    readonly property Item sectionDropSpace: hostsTraySection && activeItem.sectionHost ? activeItem.sectionHost.dropSpace : null
+
+    function traySectionContains(x, y) {
+      var host = hostsTraySection ? activeItem.sectionHost : null
+      if (!host || !host.visible || host.width <= 0 || host.height <= 0) return false
+      var point = slot.mapToItem(host, x, y)
+      return point.x >= 0 && point.y >= 0 && point.x <= host.width && point.y <= host.height
     }
     implicitWidth: activeItem && activeItem.visible ? (root.vertical ? root.barSize : activeItem.implicitWidth) : 0
     implicitHeight: activeItem && activeItem.visible ? activeItem.implicitHeight : 0
@@ -2023,15 +2091,27 @@ Item {
       // Snap toward the start of the slot, matching native glyph rendering.
       x: root.vertical
         ? (root.position === "left" ? parent.width - width - inset : inset)
-        : Math.floor((parent.width - width) / 2)
+        : Math.floor(slot.panelIndicatorCenter - width / 2)
       y: root.vertical
-        ? Math.floor((parent.height - height) / 2)
+        ? Math.floor(slot.panelIndicatorCenter - height / 2)
         : (root.position === "top" ? parent.height - height - inset : inset)
       z: 50
 
       Behavior on opacity {
         NumberAnimation { duration: Style.duration(120); easing.type: Easing.OutCubic }
       }
+    }
+
+    // The tray section's widgets, drawn inside the tray's drawer. They are
+    // ordinary module slots of their own region, so they open panels, drag
+    // and keep settings the way widgets on the bar do.
+    // Built through a Component outside ModuleSlot: a module list holds
+    // module slots, so one declared in here would make the types a cycle.
+    Loader {
+      readonly property Item host: slot.hostsTraySection ? slot.activeItem.sectionHost : null
+      parent: host || slot
+      active: !!host
+      sourceComponent: traySectionComponent
     }
 
     MouseArea {
@@ -2056,6 +2136,12 @@ Item {
       // make neighboring modules overlap after a small aborted drag.
 
       onPressed: function(mouse) {
+        // A press on a widget in the tray's drawer belongs to that widget's
+        // own slot, underneath this one, so it drags that widget, not the tray.
+        if (slot.traySectionContains(mouse.x, mouse.y)) {
+          mouse.accepted = false
+          return
+        }
         dragging = false
         suppressClick = false
         pressedX = mouse.x
