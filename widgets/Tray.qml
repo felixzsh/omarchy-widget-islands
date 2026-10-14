@@ -428,7 +428,8 @@ BarWidget {
       spacing: Style.space(8)
 
       Text {
-        text: "Tray icons"
+        text: Commons.I18n.t("tray.title")
+        textFormat: Text.PlainText
         color: root.foreground
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
@@ -436,7 +437,8 @@ BarWidget {
       }
 
       Text {
-        text: "Pinned icons stay visible. Hidden icons never show."
+        text: Commons.I18n.t("tray.help")
+        textFormat: Text.PlainText
         color: Qt.darker(root.foreground, 1.4)
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -446,7 +448,8 @@ BarWidget {
 
       Text {
         visible: root.allItems.length === 0
-        text: "No tray items reporting."
+        text: Commons.I18n.t("tray.empty")
+        textFormat: Text.PlainText
         color: Qt.darker(root.foreground, 1.5)
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
@@ -470,7 +473,7 @@ BarWidget {
             if (tt) return tt
             var id = String(modelData.id || "")
             var slash = id.lastIndexOf("/")
-            return slash !== -1 ? id.substring(slash + 1) : (id || "Unknown")
+            return slash !== -1 ? id.substring(slash + 1) : (id || Commons.I18n.t("tray.unknown"))
           }
           readonly property bool isPinned: root.pinnedIds.indexOf(itemId) !== -1
           readonly property bool isHidden: root.hiddenIds.indexOf(itemId) !== -1
@@ -503,7 +506,7 @@ BarWidget {
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
             iconText: "\uf08d"
-            text: rowRoot.isPinned ? "Unpin" : "Pin"
+            text: rowRoot.isPinned ? Commons.I18n.t("tray.unpin") : Commons.I18n.t("tray.pin")
             foreground: root.foreground
             horizontalPadding: 8
             verticalPadding: 3
@@ -518,7 +521,7 @@ BarWidget {
             anchors.right: rowPinBtn.left
             anchors.rightMargin: Style.space(6)
             iconText: "\uf06e"
-            text: rowRoot.isHidden ? "Show" : "Hide"
+            text: rowRoot.isHidden ? Commons.I18n.t("tray.show") : Commons.I18n.t("tray.hide")
             foreground: root.foreground
             horizontalPadding: 8
             verticalPadding: 3
@@ -589,7 +592,9 @@ BarWidget {
             anchors.left: parent.left
             width: Style.space(22)
             horizontalAlignment: Text.AlignHCenter
-            text: "\u2039"
+            textFormat: Text.PlainText
+            // Back points against the reading direction.
+            text: Commons.I18n.rightToLeft ? "\u203a" : "\u2039"
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -750,7 +755,8 @@ BarWidget {
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.right: parent.right
                 anchors.rightMargin: Style.space(10)
-                text: "\u203a"
+                textFormat: Text.PlainText
+                text: Commons.I18n.rightToLeft ? "\u2039" : "\u203a"
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
