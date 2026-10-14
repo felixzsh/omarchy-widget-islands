@@ -597,7 +597,11 @@ Item {
   // have none. It is read as the shell starts (blockLoading), so a bar surface
   // knows before it maps whether its screen may have one. See
   // BarModel.parseCutouts.
-  readonly property var displayCutouts: displayCutoutsFile.missing ? [] : BarModel.parseCutouts(displayCutoutsFile.text())
+  // Read synchronously at startup (the FileView blocks loading, so the bar
+  // knows before it maps whether its screen may have a cutout), then kept
+  // current by its load handlers below. Binding this to the missing flag
+  // the handlers write — as it was — loops on every shell start.
+  property var displayCutouts: BarModel.parseCutouts(displayCutoutsFile.text())
   FileView {
     id: displayCutoutsFile
 
@@ -608,8 +612,14 @@ Item {
     blockLoading: true
     watchChanges: true
     printErrors: false
-    onLoaded: missing = false
-    onLoadFailed: missing = true
+    onLoaded: {
+      missing = false
+      root.displayCutouts = BarModel.parseCutouts(text())
+    }
+    onLoadFailed: {
+      missing = true
+      root.displayCutouts = []
+    }
     onFileChanged: reload()
   }
 
