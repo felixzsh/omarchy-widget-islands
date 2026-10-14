@@ -836,7 +836,10 @@ BarWidget {
     property alias dropSpace: dropSpace
 
     Component.onCompleted: root.sectionHost = sectionArea
-    Component.onDestruction: if (root.sectionHost === sectionArea) root.sectionHost = null
+    // The bar can tear this area down after the widget itself is gone
+    // (a plugin rescan destroys them in its own order), so unregister
+    // only while the widget is still there to unregister from.
+    Component.onDestruction: if (root && root.sectionHost === sectionArea) root.sectionHost = null
 
     Item {
       id: dropSpace
